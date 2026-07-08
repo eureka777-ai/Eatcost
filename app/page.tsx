@@ -11,6 +11,10 @@ type Activity = "久坐" | "轻度活动" | "中度活动" | "高度活动";
 type Goal = "维持体重" | "减重" | "增重";
 type Section = "record" | "today" | "insights" | "month";
 type CalorieConfidence = "准确" | "估算" | "待补充";
+type DeleteTarget =
+  | { type: "food"; id: string; name: string }
+  | { type: "exercise"; id: string; name: string }
+  | { type: "template"; id: string; name: string };
 
 type BodyData = {
   gender: "女" | "男";
@@ -269,6 +273,8 @@ function HomeApp({ userId }: { userId: string }) {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
   const [aiEstimate, setAiEstimate] = useState<MealEstimate | null>(null);
+  const [notice, setNotice] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<DeleteTarget | null>(null);
 
   useEffect(() => {
     setBody({ ...defaultBody, ...loadUserState(userId, "body", defaultBody) });
@@ -291,6 +297,12 @@ function HomeApp({ userId }: { userId: string }) {
     setFoodForm((current) => ({ ...current, date: selectedDate }));
     setExerciseForm((current) => ({ ...current, date: selectedDate }));
   }, [editingExerciseId, editingFoodId, selectedDate]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 2200);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   const metrics = useMemo(() => {
     const bmr =
@@ -433,6 +445,7 @@ function HomeApp({ userId }: { userId: string }) {
         note: "示例数据"
       }
     ]);
+    setNotice("示例数据已填入");
   }
 
   function saveFood(event: FormEvent) {
@@ -449,6 +462,7 @@ function HomeApp({ userId }: { userId: string }) {
     );
     setFoodForm({ ...defaultFood, date: selectedDate });
     setEditingFoodId(null);
+    setNotice(editingFoodId ? "吃喝记录已保存" : "已新增吃喝记录");
   }
 
   function saveCurrentAsTemplate() {
@@ -465,6 +479,7 @@ function HomeApp({ userId }: { userId: string }) {
       editingTemplateId ? current.map((item) => (item.id === editingTemplateId ? template : item)) : [template, ...current]
     );
     setEditingTemplateId(null);
+    setNotice(editingTemplateId ? "常吃模板已更新" : "已保存为常吃模板");
   }
 
   function editTemplate(item: FoodTemplate) {
@@ -488,12 +503,43 @@ function HomeApp({ userId }: { userId: string }) {
     );
     setExerciseForm({ ...defaultExercise, date: selectedDate });
     setEditingExerciseId(null);
+    setExerciseOpen(false);
+    setNotice(editingExerciseId ? "运动记录已保存" : "已新增运动记录");
+  }
+
+  function confirmDelete() {
+    if (!pendingDelete) return;
+    if (pendingDelete.type === "food") {
+      setFoods((current) => current.filter((food) => food.id !== pendingDelete.id));
+      setNotice("吃喝记录已删除");
+    }
+    if (pendingDelete.type === "exercise") {
+      setExercises((current) => current.filter((exercise) => exercise.id !== pendingDelete.id));
+      setNotice("运动记录已删除");
+    }
+    if (pendingDelete.type === "template") {
+      setTemplates((current) => current.filter((template) => template.id !== pendingDelete.id));
+      setNotice("常吃模板已删除");
+    }
+    setPendingDelete(null);
   }
 
   function openSection(section: Section, options?: { openExercise?: boolean }) {
     setActiveSection(section);
     if (options?.openExercise) setExerciseOpen(true);
     window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+  }
+
+  function openExerciseModal() {
+    setEditingExerciseId(null);
+    setExerciseForm({ ...defaultExercise, date: selectedDate });
+    setExerciseOpen(true);
+  }
+
+  function closeExerciseModal() {
+    setExerciseOpen(false);
+    setEditingExerciseId(null);
+    setExerciseForm({ ...defaultExercise, date: selectedDate });
   }
 
   async function analyzeMealPhoto(file: File) {
@@ -605,7 +651,7 @@ function HomeApp({ userId }: { userId: string }) {
           title="记运动"
           value={`${round(stats.todayExercise)} kcal`}
           note="记录额外消耗"
-          onClick={() => openSection("record", { openExercise: true })}
+          onClick={openExerciseModal}
         />
         <DashboardAction
           title="看支出"
@@ -621,8 +667,18 @@ function HomeApp({ userId }: { userId: string }) {
             <TemplateSuggestions remainingIntake={stats.remainingIntake} remainingBudget={stats.todayBudgetLeft} templates={templates} />
           </Card>
 
-      <div className="mt-4 grid gap-3 sm:gap-4 lg:grid-cols-[1.45fr_0.75fr]">
+      <div className="mt-4">
         <Card title="快速记录吃喝">
+          <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
+            <p className="text-sm leading-6 text-muted">先记一餐，运动消耗可以用右侧按钮单独补，不占主页面空间。</p>
+            <button
+              className="rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(0,0,0,0.16)] transition hover:bg-black active:scale-[0.98]"
+              onClick={openExerciseModal}
+              type="button"
+            >
+              + 记录运动
+            </button>
+          </div>
           <div className="mb-4 rounded-[20px] bg-[#f5f5f7] p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -748,7 +804,7 @@ function HomeApp({ userId }: { userId: string }) {
                     <button
                       className="rounded-full bg-[#fff1f0] px-3 py-1 text-xs font-medium text-tomato"
                       type="button"
-                      onClick={() => setTemplates((current) => current.filter((template) => template.id !== item.id))}
+                      onClick={() => setPendingDelete({ type: "template", id: item.id, name: item.name })}
                     >
                       删除
                     </button>
@@ -757,27 +813,6 @@ function HomeApp({ userId }: { userId: string }) {
               ))}
             </div>
           </div>
-        </Card>
-
-        <Card title="运动">
-          <button
-            className="w-full rounded-2xl bg-ink px-4 py-3 font-semibold text-white shadow-[0_10px_24px_rgba(0,0,0,0.16)] transition hover:bg-black"
-            onClick={() => setExerciseOpen((open) => !open)}
-          >
-            {exerciseOpen ? "收起运动记录" : "+ 记录运动"}
-          </button>
-          {exerciseOpen && (
-            <form className="mt-4 grid gap-3" onSubmit={saveExercise}>
-              <Text label="运动名称" value={exerciseForm.name} onChange={(value) => setExerciseForm({ ...exerciseForm, name: value })} />
-              <Field label="时长 分钟，可选" value={exerciseForm.minutes} onChange={(value) => setExerciseForm({ ...exerciseForm, minutes: value === "" ? "" : Number(value) })} />
-              <Field label="消耗热量 kcal" value={exerciseForm.calories} onChange={(value) => setExerciseForm({ ...exerciseForm, calories: Number(value) })} />
-              <Text label="日期" type="date" value={exerciseForm.date} onChange={(value) => setExerciseForm({ ...exerciseForm, date: value })} />
-              <Text label="备注" value={exerciseForm.note} onChange={(value) => setExerciseForm({ ...exerciseForm, note: value })} />
-              <button className="rounded-2xl bg-apple px-4 py-3 font-semibold text-white">
-                {editingExerciseId ? "保存运动记录" : "新增运动记录"}
-              </button>
-            </form>
-          )}
         </Card>
       </div>
       <Card title={`${selectedDateLabel(selectedDate)}记录`} className="mt-4">
@@ -789,13 +824,13 @@ function HomeApp({ userId }: { userId: string }) {
             setFoodForm(stripId(item));
             setEditingFoodId(item.id);
           }}
-          onDeleteFood={(item) => setFoods((current) => current.filter((food) => food.id !== item.id))}
+          onDeleteFood={(item) => setPendingDelete({ type: "food", id: item.id, name: item.name })}
           onEditExercise={(item) => {
             setExerciseOpen(true);
             setExerciseForm(stripId(item));
             setEditingExerciseId(item.id);
           }}
-          onDeleteExercise={(item) => setExercises((current) => current.filter((exercise) => exercise.id !== item.id))}
+          onDeleteExercise={(item) => setPendingDelete({ type: "exercise", id: item.id, name: item.name })}
         />
       </Card>
         </section>
@@ -812,13 +847,13 @@ function HomeApp({ userId }: { userId: string }) {
             setFoodForm(stripId(item));
             setEditingFoodId(item.id);
           }}
-          onDeleteFood={(item) => setFoods((current) => current.filter((food) => food.id !== item.id))}
+          onDeleteFood={(item) => setPendingDelete({ type: "food", id: item.id, name: item.name })}
           onEditExercise={(item) => {
             setExerciseOpen(true);
             setExerciseForm(stripId(item));
             setEditingExerciseId(item.id);
           }}
-          onDeleteExercise={(item) => setExercises((current) => current.filter((exercise) => exercise.id !== item.id))}
+          onDeleteExercise={(item) => setPendingDelete({ type: "exercise", id: item.id, name: item.name })}
         />
       </Card>
       </section>
@@ -897,6 +932,36 @@ function HomeApp({ userId }: { userId: string }) {
       </section>
       )}
 
+      {exerciseOpen && (
+        <Modal title={editingExerciseId ? "编辑运动记录" : "记录运动"} onClose={closeExerciseModal}>
+          <form className="grid gap-3" onSubmit={saveExercise}>
+            <Text label="运动名称" value={exerciseForm.name} onChange={(value) => setExerciseForm({ ...exerciseForm, name: value })} />
+            <Field label="时长 分钟，可选" value={exerciseForm.minutes} onChange={(value) => setExerciseForm({ ...exerciseForm, minutes: value === "" ? "" : Number(value) })} />
+            <Field label="消耗热量 kcal" value={exerciseForm.calories} onChange={(value) => setExerciseForm({ ...exerciseForm, calories: Number(value) })} />
+            <Text label="日期" type="date" value={exerciseForm.date} onChange={(value) => setExerciseForm({ ...exerciseForm, date: value })} />
+            <Text label="备注" value={exerciseForm.note} onChange={(value) => setExerciseForm({ ...exerciseForm, note: value })} />
+            <button className="rounded-2xl bg-apple px-4 py-3 font-semibold text-white shadow-[0_10px_24px_rgba(0,122,255,0.24)] transition active:scale-[0.98]">
+              {editingExerciseId ? "保存运动记录" : "新增运动记录"}
+            </button>
+          </form>
+        </Modal>
+      )}
+
+      {pendingDelete && (
+        <Modal title="确认删除" onClose={() => setPendingDelete(null)}>
+          <p className="text-sm leading-6 text-muted">要删除“{pendingDelete.name}”吗？这个操作不能撤回。</p>
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <button className="rounded-2xl bg-[#f2f2f7] px-4 py-3 font-semibold text-ink" type="button" onClick={() => setPendingDelete(null)}>
+              取消
+            </button>
+            <button className="rounded-2xl bg-[#fff1f0] px-4 py-3 font-semibold text-tomato" type="button" onClick={confirmDelete}>
+              删除
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {notice && <Toast message={notice} />}
     </main>
   );
 }
@@ -1226,7 +1291,7 @@ function DistributionPanel({
 
 function Card({ title, children, className = "" }: { title: string; children: React.ReactNode; className?: string }) {
   return (
-    <section className={`rounded-[20px] border border-white/70 bg-paper p-4 shadow-soft backdrop-blur-xl sm:rounded-[22px] sm:p-5 ${className}`}>
+    <section className={`animate-[cardIn_0.28s_ease-out] rounded-[20px] border border-white/70 bg-paper p-4 shadow-soft backdrop-blur-xl transition hover:-translate-y-0.5 hover:shadow-[0_18px_50px_rgba(0,0,0,0.08)] sm:rounded-[22px] sm:p-5 ${className}`}>
       <h2 className="mb-4 text-lg font-semibold text-ink sm:text-xl">{title}</h2>
       {children}
     </section>
@@ -1256,7 +1321,7 @@ function DashboardAction({
 }) {
   return (
     <button
-      className="min-h-36 rounded-[22px] border border-white/70 bg-paper p-4 text-left shadow-soft backdrop-blur-xl transition hover:bg-white active:scale-[0.98] sm:min-h-40 sm:p-5"
+      className="min-h-36 rounded-[22px] border border-white/70 bg-paper p-4 text-left shadow-soft backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-white hover:shadow-[0_18px_50px_rgba(0,0,0,0.08)] active:scale-[0.98] sm:min-h-40 sm:p-5"
       onClick={onClick}
       type="button"
     >
@@ -1271,6 +1336,32 @@ function DashboardAction({
         <p className="text-xs leading-5 text-muted sm:text-sm">{note}</p>
       </div>
     </button>
+  );
+}
+
+function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-40 grid place-items-end bg-black/20 px-3 py-3 backdrop-blur-sm sm:place-items-center" role="dialog" aria-modal="true">
+      <section className="w-full max-w-md animate-[modalIn_0.24s_ease-out] rounded-[28px] border border-white/80 bg-paper p-5 shadow-[0_24px_80px_rgba(0,0,0,0.18)]">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold text-ink">{title}</h2>
+          <button className="grid h-9 w-9 place-items-center rounded-full bg-[#f2f2f7] text-lg font-semibold text-muted transition hover:bg-white" type="button" onClick={onClose}>
+            ×
+          </button>
+        </div>
+        {children}
+      </section>
+    </div>
+  );
+}
+
+function Toast({ message }: { message: string }) {
+  return (
+    <div className="fixed inset-x-0 bottom-5 z-50 flex justify-center px-4">
+      <div className="animate-[toastIn_0.22s_ease-out] rounded-full bg-ink px-5 py-3 text-sm font-semibold text-white shadow-[0_16px_50px_rgba(0,0,0,0.2)]">
+        {message}
+      </div>
+    </div>
   );
 }
 
