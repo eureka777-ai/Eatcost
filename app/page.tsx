@@ -154,7 +154,7 @@ function fileToDataUrl(file: File) {
 
     image.onload = () => {
       try {
-        const maxSide = 640;
+        const maxSide = 512;
         const ratio = Math.min(maxSide / image.width, maxSide / image.height, 1);
         const canvas = document.createElement("canvas");
         canvas.width = Math.round(image.width * ratio);
@@ -165,7 +165,7 @@ function fileToDataUrl(file: File) {
           return;
         }
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/jpeg", 0.62));
+        resolve(canvas.toDataURL("image/jpeg", 0.5));
       } catch {
         reject(new Error("这张图片格式暂时读不了，请换一张照片再试"));
       } finally {
@@ -356,7 +356,7 @@ function HomeApp({ userId }: { userId: string }) {
     setAiError("");
     setAiEstimate(null);
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 45000);
+    const timeout = window.setTimeout(() => controller.abort(), 60000);
     try {
       const image = await fileToDataUrl(file);
       const response = await fetch("/api/analyze-meal", {
@@ -430,7 +430,6 @@ function HomeApp({ userId }: { userId: string }) {
           title="看热量"
           value={`${round(stats.remainingIntake)} kcal`}
           note="今天剩余可吃"
-          strong
           onClick={() => openSection("insights")}
         />
         <DashboardAction
@@ -461,21 +460,37 @@ function HomeApp({ userId }: { userId: string }) {
                 <p className="font-semibold text-ink">拍照估算热量</p>
                 <p className="mt-1 text-sm leading-5 text-muted">上传这餐照片，AI 会估算名称和热量；价格仍需要你确认。</p>
               </div>
-              <label className="shrink-0 cursor-pointer rounded-full bg-white px-4 py-2 text-center text-sm font-semibold text-apple shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
-                {aiLoading ? "识别中..." : "拍照 / 上传"}
-                <input
-                  className="hidden"
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  disabled={aiLoading}
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) analyzeMealPhoto(file);
-                    event.currentTarget.value = "";
-                  }}
-                />
-              </label>
+              <div className="flex shrink-0 gap-2">
+                <label className="cursor-pointer rounded-full bg-white px-4 py-2 text-center text-sm font-semibold text-apple shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
+                  {aiLoading ? "识别中..." : "拍照"}
+                  <input
+                    className="hidden"
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    disabled={aiLoading}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) analyzeMealPhoto(file);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+                <label className="cursor-pointer rounded-full bg-white px-4 py-2 text-center text-sm font-semibold text-apple shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
+                  上传图片
+                  <input
+                    className="hidden"
+                    type="file"
+                    accept="image/*"
+                    disabled={aiLoading}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) analyzeMealPhoto(file);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+              </div>
             </div>
             {aiEstimate && (
               <div className="mt-3 rounded-2xl bg-white p-3 text-sm text-muted">
@@ -555,56 +570,46 @@ function HomeApp({ userId }: { userId: string }) {
           )}
         </Card>
       </div>
+      <Card title="今日记录" className="mt-4">
+        <TodayRecords
+          meals={meals}
+          todayFoods={stats.todayFoods}
+          todayExercises={stats.todayExercises}
+          onEditFood={(item) => {
+            setFoodForm(stripId(item));
+            setEditingFoodId(item.id);
+          }}
+          onDeleteFood={(item) => setFoods((current) => current.filter((food) => food.id !== item.id))}
+          onEditExercise={(item) => {
+            setExerciseOpen(true);
+            setExerciseForm(stripId(item));
+            setEditingExerciseId(item.id);
+          }}
+          onDeleteExercise={(item) => setExercises((current) => current.filter((exercise) => exercise.id !== item.id))}
+        />
+      </Card>
         </section>
       )}
 
       {activeSection === "today" && (
       <section>
       <Card title="今日时间线" className="mt-4">
-        <div className="space-y-5">
-          {meals.map((meal) => {
-            const items = stats.todayFoods.filter((item) => item.meal === meal);
-            if (items.length === 0) return null;
-            return (
-              <TimelineGroup key={meal} title={meal}>
-                {items.map((item) => (
-                  <RecordRow
-                    key={item.id}
-                    title={item.name}
-                    meta={`${item.category} · ${item.source} · ${item.payment}`}
-                    value={`${money(item.amount)} · ${item.calories} kcal`}
-                    onEdit={() => {
-                      setFoodForm(stripId(item));
-                      setEditingFoodId(item.id);
-                    }}
-                    onDelete={() => setFoods((current) => current.filter((food) => food.id !== item.id))}
-                  />
-                ))}
-              </TimelineGroup>
-            );
-          })}
-          {stats.todayExercises.length > 0 && (
-            <TimelineGroup title="运动消耗">
-              {stats.todayExercises.map((item) => (
-                <RecordRow
-                  key={item.id}
-                  title={item.name}
-                  meta={`${item.minutes || 0} 分钟 · ${item.note || "运动"}`}
-                  value={`-${item.calories} kcal`}
-                  onEdit={() => {
-                    setExerciseOpen(true);
-                    setExerciseForm(stripId(item));
-                    setEditingExerciseId(item.id);
-                  }}
-                  onDelete={() => setExercises((current) => current.filter((exercise) => exercise.id !== item.id))}
-                />
-              ))}
-            </TimelineGroup>
-          )}
-          {stats.todayFoods.length + stats.todayExercises.length === 0 && (
-            <p className="rounded-2xl bg-[#f2f2f7] p-4 text-sm leading-6 text-muted">今天还没有记录吃喝。先用上面的常吃快捷记一笔，系统再计算实际缺口。</p>
-          )}
-        </div>
+        <TodayRecords
+          meals={meals}
+          todayFoods={stats.todayFoods}
+          todayExercises={stats.todayExercises}
+          onEditFood={(item) => {
+            setFoodForm(stripId(item));
+            setEditingFoodId(item.id);
+          }}
+          onDeleteFood={(item) => setFoods((current) => current.filter((food) => food.id !== item.id))}
+          onEditExercise={(item) => {
+            setExerciseOpen(true);
+            setExerciseForm(stripId(item));
+            setEditingExerciseId(item.id);
+          }}
+          onDeleteExercise={(item) => setExercises((current) => current.filter((exercise) => exercise.id !== item.id))}
+        />
       </Card>
       </section>
       )}
@@ -725,6 +730,64 @@ function TemplateSuggestions({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function TodayRecords({
+  meals,
+  todayFoods,
+  todayExercises,
+  onEditFood,
+  onDeleteFood,
+  onEditExercise,
+  onDeleteExercise
+}: {
+  meals: Meal[];
+  todayFoods: FoodRecord[];
+  todayExercises: ExerciseRecord[];
+  onEditFood: (item: FoodRecord) => void;
+  onDeleteFood: (item: FoodRecord) => void;
+  onEditExercise: (item: ExerciseRecord) => void;
+  onDeleteExercise: (item: ExerciseRecord) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      {meals.map((meal) => {
+        const items = todayFoods.filter((item) => item.meal === meal);
+        if (items.length === 0) return null;
+        return (
+          <TimelineGroup key={meal} title={meal}>
+            {items.map((item) => (
+              <RecordRow
+                key={item.id}
+                title={item.name}
+                meta={`${item.category} · ${item.source} · ${item.payment}`}
+                value={`${money(item.amount)} · ${item.calories} kcal`}
+                onEdit={() => onEditFood(item)}
+                onDelete={() => onDeleteFood(item)}
+              />
+            ))}
+          </TimelineGroup>
+        );
+      })}
+      {todayExercises.length > 0 && (
+        <TimelineGroup title="运动消耗">
+          {todayExercises.map((item) => (
+            <RecordRow
+              key={item.id}
+              title={item.name}
+              meta={`${item.minutes || 0} 分钟 · ${item.note || "运动"}`}
+              value={`-${item.calories} kcal`}
+              onEdit={() => onEditExercise(item)}
+              onDelete={() => onDeleteExercise(item)}
+            />
+          ))}
+        </TimelineGroup>
+      )}
+      {todayFoods.length + todayExercises.length === 0 && (
+        <p className="rounded-2xl bg-[#f2f2f7] p-4 text-sm leading-6 text-muted">今天还没有记录吃喝。先用上面的常吃快捷记一笔，系统再计算实际缺口。</p>
+      )}
     </div>
   );
 }
@@ -904,20 +967,16 @@ function DashboardAction({
   title,
   value,
   note,
-  onClick,
-  strong = false
+  onClick
 }: {
   title: string;
   value: string;
   note: string;
   onClick: () => void;
-  strong?: boolean;
 }) {
   return (
     <button
-      className={`min-h-36 rounded-[22px] border border-white/70 bg-paper p-4 text-left shadow-soft backdrop-blur-xl transition active:scale-[0.98] sm:min-h-40 sm:p-5 ${
-        strong ? "ring-2 ring-mint/70" : ""
-      } hover:bg-white`}
+      className="min-h-36 rounded-[22px] border border-white/70 bg-paper p-4 text-left shadow-soft backdrop-blur-xl transition hover:bg-white active:scale-[0.98] sm:min-h-40 sm:p-5"
       onClick={onClick}
       type="button"
     >
