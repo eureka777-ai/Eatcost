@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import AuthGate from "./components/AuthGate";
 
 type Category = "正餐" | "饮料" | "甜品" | "零食" | "水果" | "其他";
@@ -9,7 +9,7 @@ type Source = "外卖" | "堂食" | "自己做饭" | "便利店" | "咖啡店" |
 type Payment = "微信" | "支付宝" | "银行卡" | "现金" | "其他";
 type Activity = "久坐" | "轻度活动" | "中度活动" | "高度活动";
 type Goal = "维持体重" | "减重" | "增重";
-type Section = "record" | "today" | "insights" | "month";
+type Section = "today" | "record" | "insights" | "settings";
 type CalorieConfidence = "准确" | "估算" | "待补充";
 type DeleteTarget =
   | { type: "food"; id: string; name: string }
@@ -149,6 +149,21 @@ function money(value: number) {
   return `¥${value.toFixed(2)}`;
 }
 
+function formatDateTime(value: string) {
+  if (!value) return "";
+  try {
+    return new Date(value).toLocaleString("zh-CN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  } catch {
+    return "";
+  }
+}
+
 function round(value: number) {
   return Math.round(Number.isFinite(value) ? value : 0);
 }
@@ -274,6 +289,8 @@ function HomeApp({ userId }: { userId: string }) {
   const [aiError, setAiError] = useState("");
   const [aiEstimate, setAiEstimate] = useState<MealEstimate | null>(null);
   const [notice, setNotice] = useState("");
+  const [errorNotice, setErrorNotice] = useState("");
+  const [lastExportAt, setLastExportAt] = useState("");
   const [pendingDelete, setPendingDelete] = useState<DeleteTarget | null>(null);
 
   useEffect(() => {
@@ -281,6 +298,7 @@ function HomeApp({ userId }: { userId: string }) {
     setFoods(normalizeFoods(loadUserState(userId, "foods", [])));
     setExercises(loadUserState(userId, "exercises", []));
     setTemplates(normalizeTemplates(loadUserState(userId, "templates", defaultTemplates)));
+    setLastExportAt(loadUserState(userId, "lastExportAt", ""));
     setReady(true);
   }, [userId]);
 
@@ -303,6 +321,12 @@ function HomeApp({ userId }: { userId: string }) {
     const timer = window.setTimeout(() => setNotice(""), 2200);
     return () => window.clearTimeout(timer);
   }, [notice]);
+
+  useEffect(() => {
+    if (!errorNotice) return;
+    const timer = window.setTimeout(() => setErrorNotice(""), 2600);
+    return () => window.clearTimeout(timer);
+  }, [errorNotice]);
 
   const metrics = useMemo(() => {
     const bmr =
@@ -524,10 +548,11 @@ function HomeApp({ userId }: { userId: string }) {
     setPendingDelete(null);
   }
 
-  function openSection(section: Section, options?: { openExercise?: boolean }) {
+  function scrollToSection(section: Section) {
     setActiveSection(section);
-    if (options?.openExercise) setExerciseOpen(true);
-    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+    window.requestAnimationFrame(() => {
+      document.getElementById(`section-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   function openExerciseModal() {
@@ -540,6 +565,92 @@ function HomeApp({ userId }: { userId: string }) {
     setExerciseOpen(false);
     setEditingExerciseId(null);
     setExerciseForm({ ...defaultExercise, date: selectedDate });
+  }
+
+  function exportBackup() {
+    const exportedAt = new Date().toISOString();
+    const backup = {
+      app: "Eatcost",
+      version: 1,
+      exportedAt,
+      body,
+      foods,
+      exercises,
+      templates
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `eatcost-backup-${today()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setLastExportAt(exportedAt);
+    saveUserState(userId, "lastExportAt", exportedAt);
+    setNotice("备份已导出");
+  }
+
+  async function importBackup(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+
+    try {
+      const parsed = JSON.parse(await file.text());
+      const isValid =
+        parsed &&
+        typeof parsed === "object" &&
+        (!parsed.foods || Array.isArray(parsed.foods)) &&
+        (!parsed.exercises || Array.isArray(parsed.exercises)) &&
+        (!parsed.templates || Array.isArray(parsed.templates));
+
+      if (!isValid) {
+        setErrorNotice("导入失败，请检查文件格式");
+        return;
+      }
+
+      const summary = [
+        `吃喝记录：${Array.isArray(parsed.foods) ? parsed.foods.length : 0} 条`,
+        `运动记录：${Array.isArray(parsed.exercises) ? parsed.exercises.length : 0} 条`,
+        `常吃模板：${Array.isArray(parsed.templates) ? parsed.templates.length : 0} 个`,
+        `身体数据：${parsed.body ? "包含" : "不包含"}`
+      ].join("\n");
+      const confirmed = window.confirm(`导入数据可能会覆盖当前数据，确定继续吗？\n\n${summary}`);
+      if (!confirmed) return;
+
+      if (parsed.body) setBody({ ...defaultBody, ...parsed.body });
+      if (Array.isArray(parsed.foods)) setFoods(normalizeFoods(parsed.foods));
+      if (Array.isArray(parsed.exercises)) setExercises(parsed.exercises);
+      if (Array.isArray(parsed.templates)) setTemplates(normalizeTemplates(parsed.templates));
+      setNotice("备份已导入");
+    } catch {
+      setErrorNotice("导入失败，请检查文件格式");
+    }
+  }
+
+  function clearAllData() {
+    const first = window.confirm("清空数据会删除当前浏览器里的所有记录，此操作无法恢复。确定继续吗？");
+    if (!first) return;
+    const second = window.confirm("请再次确认：真的要清空所有 Eatcost 数据吗？");
+    if (!second) return;
+    setBody(defaultBody);
+    setFoods([]);
+    setExercises([]);
+    setTemplates(defaultTemplates);
+    setEditingFoodId(null);
+    setEditingExerciseId(null);
+    setEditingTemplateId(null);
+    setLastExportAt("");
+    saveUserState(userId, "lastExportAt", "");
+    setNotice("数据已清空");
+  }
+
+  function restoreDefaultTemplates() {
+    const confirmed = window.confirm("恢复默认模板会把当前常吃模板替换为系统内置模板，确定继续吗？");
+    if (!confirmed) return;
+    setTemplates(defaultTemplates);
+    setEditingTemplateId(null);
+    setNotice("默认模板已恢复");
   }
 
   async function analyzeMealPhoto(file: File) {
@@ -589,26 +700,27 @@ function HomeApp({ userId }: { userId: string }) {
         </div>
         <div className="flex flex-col gap-3 sm:items-end">
           <p className="max-w-sm text-sm leading-6 text-muted sm:text-right">打开就记一餐，顺手看看今天还能吃多少、还能花多少钱。</p>
-          <a className="w-fit rounded-full bg-[#f2f2f7] px-4 py-2 text-sm font-medium text-apple transition hover:bg-white" href="/settings/">
+          <button className="btn-secondary w-fit rounded-full px-4 py-2 text-sm font-medium text-apple" type="button" onClick={() => scrollToSection("settings")}>
             设置身体数据和预算
-          </a>
+          </button>
         </div>
       </header>
 
-      <nav className="sticky top-0 z-10 -mx-3 mb-4 border-y border-white/70 bg-white/80 px-3 py-2 backdrop-blur-xl sm:static sm:mx-0 sm:rounded-full sm:border sm:px-2">
+      <nav className="mb-4 -mx-3 border-y border-white/70 bg-white/80 px-3 py-2 backdrop-blur-xl sm:mx-0 sm:rounded-full sm:border sm:px-2">
         <div className="flex gap-2 overflow-x-auto">
           {[
-            ["record", "记录"],
             ["today", "今日"],
+            ["record", "记录"],
             ["insights", "洞察"],
-            ["month", "月度"]
+            ["settings", "设置"]
           ].map(([section, label]) => (
             <button
               key={section}
-              className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition ${
-                activeSection === section ? "bg-apple text-white" : "bg-[#f2f2f7] text-ink hover:bg-white"
+              className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition hover:-translate-y-0.5 hover:bg-mint/15 hover:text-mint ${
+                activeSection === section ? "bg-mint/15 text-mint" : "bg-[#f2f2f7] text-ink"
               }`}
-              onClick={() => setActiveSection(section as Section)}
+              onClick={() => scrollToSection(section as Section)}
+              type="button"
             >
               {label}
             </button>
@@ -616,321 +728,251 @@ function HomeApp({ userId }: { userId: string }) {
         </div>
       </nav>
 
-      <DateSwitcher selectedDate={selectedDate} onChange={setSelectedDate} />
+      <section id="section-today" className="scroll-mt-4">
+        <DateSwitcher selectedDate={selectedDate} onChange={setSelectedDate} />
 
-      {foods.length + exercises.length === 0 && (
-        <section className="mb-4 rounded-[22px] border border-white/70 bg-paper p-4 shadow-soft backdrop-blur-xl sm:flex sm:items-center sm:justify-between sm:gap-4 sm:p-5">
-          <div>
-            <p className="font-semibold text-ink">想先看看完整效果？</p>
-            <p className="mt-1 text-sm leading-6 text-muted">一键放入几条示例吃喝和运动记录，之后你也可以在设置里清空。</p>
-          </div>
-          <button
-            className="mt-3 rounded-full bg-apple px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(0,122,255,0.22)] sm:mt-0"
-            onClick={fillSampleData}
-            type="button"
-          >
-            填入示例数据
-          </button>
-        </section>
-      )}
+        {foods.length + exercises.length === 0 && (
+          <EmptyState
+            title="想先看看完整效果？"
+            note="一键放入几条示例吃喝和运动记录，之后可以在数据中心清空。"
+            action="填入示例数据"
+            onAction={fillSampleData}
+            className="mb-4"
+          />
+        )}
 
-      <section className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
-        <DashboardAction
-          title="记一餐"
-          value={`${round(stats.todayIntake)} / ${metrics.suggestedIntake} kcal`}
-          note={stats.hasFoodToday ? "记录今天吃了什么" : "点这里快速记录吃喝"}
-          onClick={() => openSection("record")}
-        />
-        <DashboardAction
-          title="看热量"
-          value={`${round(stats.remainingIntake)} kcal`}
-          note="今天剩余可吃"
-          onClick={() => openSection("insights")}
-        />
-        <DashboardAction
-          title="记运动"
-          value={`${round(stats.todayExercise)} kcal`}
-          note="记录额外消耗"
-          onClick={openExerciseModal}
-        />
-        <DashboardAction
-          title="看支出"
-          value={`${money(stats.todaySpending)} / ${money(stats.budgetPerDay)}`}
-          note={`剩 ${stats.remainingDaysInMonth} 天 · 本月剩余 ${money(stats.remainingBudget)}`}
-          onClick={() => openSection("month")}
-        />
+        <SectionHeader eyebrow="Today" title="今日状态" note="打开先看这四个数：还能吃多少、还能花多少。" />
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+          <StatusCard title="今日剩余可吃" value={`${round(stats.remainingIntake)} kcal`} note="先看这个，再决定下一口" strong />
+          <StatusCard title="今日还可花" value={money(stats.todayBudgetLeft)} note={`今日建议 ${money(stats.budgetPerDay)}`} />
+          <StatusCard title="今日已摄入" value={`${round(stats.todayIntake)} / ${metrics.suggestedIntake} kcal`} note={stats.hasFoodToday ? "已记录今天吃了什么" : "今天还没有记录吃喝"} />
+          <StatusCard
+            title="今日实际缺口"
+            value={stats.hasFoodToday ? `${round(stats.todayDeficit)} kcal` : "未计算"}
+            note={stats.hasFoodToday ? (stats.targetReached ? "已达成目标缺口" : `距离目标还差 ${round(body.targetDeficit - stats.todayDeficit)} kcal`) : "先记一笔后再计算"}
+          />
+        </div>
       </section>
 
-      {activeSection === "record" && (
-        <section>
-          <Card title="今天还能吃什么" className="mt-4">
-            <TemplateSuggestions remainingIntake={stats.remainingIntake} remainingBudget={stats.todayBudgetLeft} templates={templates} />
+      <section id="section-record" className="scroll-mt-4">
+        <SectionHeader eyebrow="Record" title="快速记录" note="常吃、手动记录、运动和时间线都收在这里。" className="mt-7" />
+        <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
+          <Card title="常吃快捷">
+            {templates.length === 0 ? (
+              <EmptyState title="常吃模板空了。" note="恢复系统默认模板，先把记录入口铺起来。" action="恢复默认模板" onAction={restoreDefaultTemplates} compact />
+            ) : (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {templates.map((item) => (
+                  <div key={item.id} className="shrink-0 rounded-[22px] bg-[#f2f2f7] p-2">
+                    <button
+                      className="block min-w-32 rounded-2xl px-2 py-1 text-left transition hover:bg-white"
+                      onClick={() =>
+                        setFoodForm({
+                          ...foodForm,
+                          name: item.name,
+                          amount: item.amount,
+                          calories: item.calories,
+                          calorieConfidence: item.calorieConfidence,
+                          category: item.category
+                        })
+                      }
+                      type="button"
+                    >
+                      <span className="block text-sm font-semibold text-ink">{item.name}</span>
+                      <span className="text-xs text-muted">{money(item.amount)} · {calorieText(item)}</span>
+                    </button>
+                    <div className="mt-1 flex gap-1">
+                      <button className="btn-secondary rounded-full px-3 py-1 text-xs font-medium text-apple" type="button" onClick={() => editTemplate(item)}>
+                        编辑
+                      </button>
+                      <button
+                        className="btn-danger rounded-full px-3 py-1 text-xs font-medium"
+                        type="button"
+                        onClick={() => setPendingDelete({ type: "template", id: item.id, name: item.name })}
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
 
-      <div className="mt-4">
-        <Card title="快速记录吃喝">
-          <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
-            <p className="text-sm leading-6 text-muted">先记一餐，运动消耗可以用右侧按钮单独补，不占主页面空间。</p>
-            <button
-              className="rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(0,0,0,0.16)] transition hover:bg-black active:scale-[0.98]"
-              onClick={openExerciseModal}
-              type="button"
-            >
+          <Card title="今天还能吃什么">
+            <TemplateSuggestions remainingIntake={stats.remainingIntake} remainingBudget={stats.todayBudgetLeft} templates={templates} />
+          </Card>
+        </div>
+
+        <div className="mt-3 grid gap-3 lg:grid-cols-[1.45fr_0.85fr]">
+          <Card title="手动记录吃喝">
+            <form className="grid gap-3 sm:grid-cols-2" onSubmit={saveFood}>
+              <Text label="名称" value={foodForm.name} onChange={(value) => setFoodForm({ ...foodForm, name: value })} />
+              <Field label="金额" value={foodForm.amount} step="0.01" onChange={(value) => setFoodForm({ ...foodForm, amount: Number(value) })} />
+              <Field
+                label="热量 kcal，可空"
+                value={foodForm.calories}
+                onChange={(value) =>
+                  setFoodForm({
+                    ...foodForm,
+                    calories: value === "" ? "" : Number(value),
+                    calorieConfidence: value === "" ? "待补充" : foodForm.calorieConfidence === "待补充" ? "估算" : foodForm.calorieConfidence
+                  })
+                }
+              />
+              <Select label="餐次" value={foodForm.meal} options={meals} onChange={(value) => setFoodForm({ ...foodForm, meal: value as Meal })} />
+              <button
+                type="button"
+                className="btn-secondary rounded-2xl px-4 py-3 text-sm font-medium text-muted sm:col-span-2"
+                onClick={() => setFoodMoreOpen((open) => !open)}
+              >
+                {foodMoreOpen ? "收起更多选项" : "更多选项：分类 / 来源 / 支付 / 备注"}
+              </button>
+              {foodMoreOpen && (
+                <div className="grid gap-3 rounded-[20px] bg-white/60 p-3 sm:col-span-2 sm:grid-cols-2">
+                  <Select label="分类" value={foodForm.category} options={categories} onChange={(value) => setFoodForm({ ...foodForm, category: value as Category })} />
+                  <Select label="热量可信度" value={foodForm.calorieConfidence} options={calorieConfidences} onChange={(value) => setFoodForm({ ...foodForm, calorieConfidence: value as CalorieConfidence })} />
+                  <Select label="来源" value={foodForm.source} options={sources} onChange={(value) => setFoodForm({ ...foodForm, source: value as Source })} />
+                  <Select label="支付方式" value={foodForm.payment} options={payments} onChange={(value) => setFoodForm({ ...foodForm, payment: value as Payment })} />
+                  <Text label="日期" type="date" value={foodForm.date} onChange={(value) => setFoodForm({ ...foodForm, date: value })} />
+                  <label className="sm:col-span-2">
+                    <span className="mb-1 block text-sm text-muted">备注</span>
+                    <textarea className="min-h-20 w-full rounded-2xl border border-transparent bg-[#f2f2f7] px-4 py-3 text-ink outline-none transition focus:border-apple/40 focus:bg-white focus:ring-4 focus:ring-apple/10" value={foodForm.note} onChange={(event) => setFoodForm({ ...foodForm, note: event.target.value })} />
+                  </label>
+                </div>
+              )}
+              <button className="btn-primary rounded-2xl px-4 py-3 font-semibold text-white sm:col-span-2">
+                {editingFoodId ? "保存吃喝记录" : "新增吃喝记录"}
+              </button>
+              <button className="btn-secondary rounded-2xl px-4 py-3 text-sm font-semibold text-apple sm:col-span-2" type="button" onClick={saveCurrentAsTemplate}>
+                {editingTemplateId ? "保存常吃模板修改" : "把当前内容存为常吃模板"}
+              </button>
+            </form>
+          </Card>
+
+          <Card title="记录运动">
+            <p className="mb-4 text-sm leading-6 text-muted">运动不是每天必填，所以默认收起来，需要时再打开。</p>
+            <button className="btn-dark w-full rounded-2xl px-5 py-3 font-semibold text-white" onClick={openExerciseModal} type="button">
               + 记录运动
             </button>
-          </div>
-          <div className="mb-4 rounded-[20px] bg-[#f5f5f7] p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="font-semibold text-ink">拍照估算热量</p>
-                <p className="mt-1 text-sm leading-5 text-muted">上传这餐照片，AI 会估算名称和热量；价格仍需要你确认。</p>
-              </div>
-              <div className="flex shrink-0 gap-2">
-                <label className="cursor-pointer rounded-full bg-white px-4 py-2 text-center text-sm font-semibold text-apple shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
-                  {aiLoading ? "识别中..." : "拍照"}
-                  <input
-                    className="hidden"
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    disabled={aiLoading}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) analyzeMealPhoto(file);
-                      event.currentTarget.value = "";
-                    }}
-                  />
-                </label>
-                <label className="cursor-pointer rounded-full bg-white px-4 py-2 text-center text-sm font-semibold text-apple shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
-                  上传图片
-                  <input
-                    className="hidden"
-                    type="file"
-                    accept="image/*"
-                    disabled={aiLoading}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) analyzeMealPhoto(file);
-                      event.currentTarget.value = "";
-                    }}
-                  />
-                </label>
-              </div>
-            </div>
-            {aiEstimate && (
-              <div className="mt-3 rounded-2xl bg-white p-3 text-sm text-muted">
-                <span className="font-semibold text-ink">{aiEstimate.name}</span> · 约 {aiEstimate.calories} kcal · 可信度 {aiEstimate.confidence}
-                {aiEstimate.note && <p className="mt-1">{aiEstimate.note}</p>}
-              </div>
-            )}
-            {aiError && <p className="mt-3 rounded-2xl bg-[#fff1f0] p-3 text-sm text-tomato">{aiError}</p>}
-          </div>
-          <form className="grid gap-3 sm:grid-cols-2" onSubmit={saveFood}>
-            <Text label="名称" value={foodForm.name} onChange={(value) => setFoodForm({ ...foodForm, name: value })} />
-            <Field label="金额" value={foodForm.amount} step="0.01" onChange={(value) => setFoodForm({ ...foodForm, amount: Number(value) })} />
-            <Field
-              label="热量 kcal，可空"
-              value={foodForm.calories}
-              onChange={(value) =>
-                setFoodForm({
-                  ...foodForm,
-                  calories: value === "" ? "" : Number(value),
-                  calorieConfidence: value === "" ? "待补充" : foodForm.calorieConfidence === "待补充" ? "估算" : foodForm.calorieConfidence
-                })
-              }
-            />
-            <Select label="餐次" value={foodForm.meal} options={meals} onChange={(value) => setFoodForm({ ...foodForm, meal: value as Meal })} />
-            <button
-              type="button"
-              className="rounded-2xl bg-[#f2f2f7] px-4 py-3 text-sm font-medium text-muted transition hover:text-apple sm:col-span-2"
-              onClick={() => setFoodMoreOpen((open) => !open)}
-            >
-              {foodMoreOpen ? "收起更多选项" : "更多选项：分类 / 来源 / 支付 / 备注"}
-            </button>
-            {foodMoreOpen && (
-              <div className="grid gap-3 rounded-[20px] bg-white/60 p-3 sm:col-span-2 sm:grid-cols-2">
-                <Select label="分类" value={foodForm.category} options={categories} onChange={(value) => setFoodForm({ ...foodForm, category: value as Category })} />
-                <Select label="热量可信度" value={foodForm.calorieConfidence} options={calorieConfidences} onChange={(value) => setFoodForm({ ...foodForm, calorieConfidence: value as CalorieConfidence })} />
-                <Select label="来源" value={foodForm.source} options={sources} onChange={(value) => setFoodForm({ ...foodForm, source: value as Source })} />
-                <Select label="支付方式" value={foodForm.payment} options={payments} onChange={(value) => setFoodForm({ ...foodForm, payment: value as Payment })} />
-                <Text label="日期" type="date" value={foodForm.date} onChange={(value) => setFoodForm({ ...foodForm, date: value })} />
-                <label className="sm:col-span-2">
-                  <span className="mb-1 block text-sm text-muted">备注</span>
-                  <textarea className="min-h-20 w-full rounded-2xl border border-transparent bg-[#f2f2f7] px-4 py-3 text-ink outline-none transition focus:border-apple/40 focus:bg-white focus:ring-4 focus:ring-apple/10" value={foodForm.note} onChange={(event) => setFoodForm({ ...foodForm, note: event.target.value })} />
-                </label>
-              </div>
-            )}
-            <button className="rounded-2xl bg-apple px-4 py-3 font-semibold text-white shadow-[0_10px_24px_rgba(0,122,255,0.24)] transition hover:bg-[#006fe6] sm:col-span-2">
-              {editingFoodId ? "保存吃喝记录" : "新增吃喝记录"}
-            </button>
-            <button
-              className="rounded-2xl bg-[#f2f2f7] px-4 py-3 text-sm font-semibold text-apple transition hover:bg-white sm:col-span-2"
-              type="button"
-              onClick={saveCurrentAsTemplate}
-            >
-              {editingTemplateId ? "保存常吃模板修改" : "把当前内容存为常吃模板"}
-            </button>
-          </form>
+          </Card>
+        </div>
 
-          <div className="mt-5 border-t border-line/70 pt-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-ink">常吃快捷</h3>
-              <span className="text-xs text-muted">点一下自动填入</span>
+        <Card title={`${selectedDateLabel(selectedDate)}时间线`} className="mt-3">
+          {stats.todayFoods.length + stats.todayExercises.length === 0 ? (
+            <EmptyState title="今天还没开吃。" note="点一个常吃模板，或者先填入示例数据看看效果。" action="填入示例数据" onAction={fillSampleData} compact />
+          ) : (
+            <TodayRecords
+              meals={meals}
+              todayFoods={stats.todayFoods}
+              todayExercises={stats.todayExercises}
+              onEditFood={(item) => {
+                setFoodForm(stripId(item));
+                setEditingFoodId(item.id);
+                scrollToSection("record");
+              }}
+              onDeleteFood={(item) => setPendingDelete({ type: "food", id: item.id, name: item.name })}
+              onEditExercise={(item) => {
+                setExerciseOpen(true);
+                setExerciseForm(stripId(item));
+                setEditingExerciseId(item.id);
+              }}
+              onDeleteExercise={(item) => setPendingDelete({ type: "exercise", id: item.id, name: item.name })}
+            />
+          )}
+        </Card>
+      </section>
+
+      <section id="section-insights" className="scroll-mt-4">
+        <SectionHeader eyebrow="Insights" title="本月洞察" note="看支出构成和热量走势，不用在一堆小卡片里找。" className="mt-7" />
+        <Card title="本月总结">
+          {stats.monthSpending === 0 ? (
+            <EmptyState title="本月还没有吃喝记录。" note="记录一餐之后，这里会显示支出构成和预计花费。" action="填入示例数据" onAction={fillSampleData} compact />
+          ) : (
+            <div className="rounded-[20px] bg-[#f2f2f7] p-4 text-sm leading-6 text-muted">
+              <p className="font-semibold text-ink">本月你在吃喝上花了 {money(stats.monthSpending)}</p>
+              <p>
+                饮料甜品花了 {money(stats.drinkDessertSpending)}，占 {Math.round(stats.drinkDessertRatio * 100)}%；外卖花了 {money(stats.deliverySpending)}，占 {Math.round(stats.deliveryRatio * 100)}%。
+              </p>
+              <p>
+                按现在速度，本月预计会花 {money(stats.projectedMonthSpending)}
+                {body.monthlyBudget > 0 && stats.projectedMonthSpending > body.monthlyBudget
+                  ? `，可能超预算 ${money(stats.projectedMonthSpending - body.monthlyBudget)}`
+                  : "，目前节奏还稳"}。
+              </p>
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {templates.map((item) => (
-                <div key={item.id} className="shrink-0 rounded-[22px] bg-[#f2f2f7] p-2">
-                  <button
-                    className="block min-w-32 rounded-2xl px-2 py-1 text-left transition hover:bg-white"
-                    onClick={() =>
-                      setFoodForm({
-                        ...foodForm,
-                        name: item.name,
-                        amount: item.amount,
-                        calories: item.calories,
-                        calorieConfidence: item.calorieConfidence,
-                        category: item.category
-                      })
-                    }
-                    type="button"
-                  >
-                    <span className="block text-sm font-semibold text-ink">{item.name}</span>
-                    <span className="text-xs text-muted">{money(item.amount)} · {calorieText(item)}</span>
-                  </button>
-                  <div className="mt-1 flex gap-1">
-                    <button className="rounded-full bg-white px-3 py-1 text-xs font-medium text-apple" type="button" onClick={() => editTemplate(item)}>
-                      编辑
-                    </button>
-                    <button
-                      className="rounded-full bg-[#fff1f0] px-3 py-1 text-xs font-medium text-tomato"
-                      type="button"
-                      onClick={() => setPendingDelete({ type: "template", id: item.id, name: item.name })}
-                    >
-                      删除
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+          )}
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Stat title="本月支出" value={money(stats.monthSpending)} />
+            <Stat title="本月预算" value={`${money(stats.monthSpending)} / ${money(body.monthlyBudget)}`} note={`剩余 ${money(stats.remainingBudget)}`} />
+            <Stat title="饮料甜品占比" value={`${Math.round(stats.drinkDessertRatio * 100)}%`} note={money(stats.drinkDessertSpending)} />
+            <Stat title="外卖占比" value={`${Math.round(stats.deliveryRatio * 100)}%`} note={money(stats.deliverySpending)} />
           </div>
         </Card>
-      </div>
-      <Card title={`${selectedDateLabel(selectedDate)}记录`} className="mt-4">
-        <TodayRecords
-          meals={meals}
-          todayFoods={stats.todayFoods}
-          todayExercises={stats.todayExercises}
-          onEditFood={(item) => {
-            setFoodForm(stripId(item));
-            setEditingFoodId(item.id);
-          }}
-          onDeleteFood={(item) => setPendingDelete({ type: "food", id: item.id, name: item.name })}
-          onEditExercise={(item) => {
-            setExerciseOpen(true);
-            setExerciseForm(stripId(item));
-            setEditingExerciseId(item.id);
-          }}
-          onDeleteExercise={(item) => setPendingDelete({ type: "exercise", id: item.id, name: item.name })}
-        />
-      </Card>
-        </section>
-      )}
 
-      {activeSection === "today" && (
-      <section>
-      <Card title={`${selectedDateLabel(selectedDate)}时间线`} className="mt-4">
-        <TodayRecords
-          meals={meals}
-          todayFoods={stats.todayFoods}
-          todayExercises={stats.todayExercises}
-          onEditFood={(item) => {
-            setFoodForm(stripId(item));
-            setEditingFoodId(item.id);
-          }}
-          onDeleteFood={(item) => setPendingDelete({ type: "food", id: item.id, name: item.name })}
-          onEditExercise={(item) => {
-            setExerciseOpen(true);
-            setExerciseForm(stripId(item));
-            setEditingExerciseId(item.id);
-          }}
-          onDeleteExercise={(item) => setPendingDelete({ type: "exercise", id: item.id, name: item.name })}
-        />
-      </Card>
+        <Card title="可视化洞察" className="mt-3">
+          <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
+            <ProgressPanel title="今日热量进度" value={`${round(stats.todayIntake)} / ${metrics.suggestedIntake} kcal`} note={`剩余 ${round(stats.remainingIntake)} kcal`} ratio={stats.calorieProgressRatio} color="#30d158" />
+            <ProgressPanel title="本月预算进度" value={`${money(stats.monthSpending)} / ${money(body.monthlyBudget)}`} note={`剩余 ${money(stats.remainingBudget)}`} ratio={stats.budgetSpentRatio} color="#007aff" />
+            <DistributionPanel title="本月支出构成" emptyText="本月还没有吃喝支出" items={stats.categorySpending} formatter={money} />
+            <DistributionPanel title="今日热量构成" emptyText="今天还没有记录热量" items={stats.mealCalories} formatter={(value) => `${round(value)} kcal`} />
+            <DistributionPanel title="本月来源构成" emptyText="本月还没有来源记录" items={stats.sourceSpending} formatter={money} className="lg:col-span-2" />
+          </div>
+        </Card>
       </section>
-      )}
 
-      {activeSection === "insights" && (
-      <section>
-      <Card title="可视化洞察" className="mt-4">
-        <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
-          <ProgressPanel
-            title="今日热量进度"
-            value={`${round(stats.todayIntake)} / ${metrics.suggestedIntake} kcal`}
-            note={`剩余 ${round(stats.remainingIntake)} kcal`}
-            ratio={stats.calorieProgressRatio}
-            color="#30d158"
-          />
-          <ProgressPanel
-            title="本月预算进度"
-            value={`${money(stats.monthSpending)} / ${money(body.monthlyBudget)}`}
-            note={`剩余 ${money(stats.remainingBudget)}`}
-            ratio={stats.budgetSpentRatio}
-            color="#007aff"
-          />
-          <DistributionPanel
-            title="本月支出构成"
-            emptyText="本月还没有吃喝支出"
-            items={stats.categorySpending}
-            formatter={money}
-          />
-          <DistributionPanel
-            title="今日热量构成"
-            emptyText="今天还没有记录热量"
-            items={stats.mealCalories}
-            formatter={(value) => `${round(value)} kcal`}
-          />
-          <DistributionPanel
-            title="本月来源构成"
-            emptyText="本月还没有来源记录"
-            items={stats.sourceSpending}
-            formatter={money}
-            className="lg:col-span-2"
-          />
-        </div>
-      </Card>
-      </section>
-      )}
+      <section id="section-settings" className="scroll-mt-4">
+        <SectionHeader eyebrow="Settings" title="设置与数据" note="不常改的东西集中放这里，平时打开首页就直接记录。" className="mt-7" />
+        <div className="grid gap-3 lg:grid-cols-3">
+          <Card title="个人目标">
+            <div className="mb-4 grid grid-cols-2 gap-2">
+              <MiniMetric title="BMR" value={`${metrics.bmr} kcal`} />
+              <MiniMetric title="TDEE" value={`${metrics.tdee} kcal`} />
+              <MiniMetric title="每日目标摄入" value={`${metrics.suggestedIntake} kcal`} />
+              <MiniMetric title="目标热量缺口" value={`${body.targetDeficit} kcal`} />
+            </div>
+            <div className="grid gap-3">
+              <Select label="性别" value={body.gender} options={["女", "男"]} onChange={(value) => setBody({ ...body, gender: value as "女" | "男" })} />
+              <Field label="年龄" value={body.age} onChange={(value) => setBody({ ...body, age: Number(value) })} />
+              <Field label="身高 cm" value={body.height} onChange={(value) => setBody({ ...body, height: Number(value) })} />
+              <Field label="当前体重 kg" value={body.currentWeight} step="0.1" onChange={(value) => setBody({ ...body, currentWeight: Number(value) })} />
+              <Field label="目标体重 kg" value={body.targetWeight} step="0.1" onChange={(value) => setBody({ ...body, targetWeight: Number(value) })} />
+              <Select label="活动水平" value={body.activity} options={Object.keys(activityFactors)} onChange={(value) => setBody({ ...body, activity: value as Activity })} />
+              <Select label="目标" value={body.goal} options={["维持体重", "减重", "增重"]} onChange={(value) => setBody({ ...body, goal: value as Goal })} />
+              <Field label="期望每日热量缺口 kcal" value={body.targetDeficit} onChange={(value) => setBody({ ...body, targetDeficit: Number(value) })} />
+            </div>
+          </Card>
 
-      {activeSection === "month" && (
-      <section>
-      <Card title="本月统计" className="mt-4">
-        <div className="mb-4 rounded-[20px] bg-[#f2f2f7] p-4 text-sm leading-6 text-muted">
-          <p className="font-semibold text-ink">本月你在吃喝上花了 {money(stats.monthSpending)}</p>
-          <p>
-            饮料甜品花了 {money(stats.drinkDessertSpending)}，占 {Math.round(stats.drinkDessertRatio * 100)}%；外卖花了 {money(stats.deliverySpending)}，占 {Math.round(stats.deliveryRatio * 100)}%。
-          </p>
-          <p>
-            按现在速度，本月预计会花 {money(stats.projectedMonthSpending)}
-            {body.monthlyBudget > 0 && stats.projectedMonthSpending > body.monthlyBudget
-              ? `，可能超预算 ${money(stats.projectedMonthSpending - body.monthlyBudget)}`
-              : "，目前节奏还稳"}。
-          </p>
+          <Card title="预算设置">
+            <div className="grid gap-3">
+              <Field label="本月吃喝预算 ¥" value={body.monthlyBudget} step="0.01" onChange={(value) => setBody({ ...body, monthlyBudget: Number(value) })} />
+              <MiniMetric title="本月已花" value={money(stats.monthSpending)} />
+              <MiniMetric title="本月剩余" value={money(stats.remainingBudget)} />
+              <MiniMetric title="今日建议可花" value={money(stats.budgetPerDay)} note={`按剩余 ${stats.remainingDaysInMonth} 天重算`} />
+              <MiniMetric title="今日还可花" value={money(stats.todayBudgetLeft)} />
+            </div>
+          </Card>
+
+          <Card title="数据中心">
+            <p className="mb-4 text-sm leading-6 text-muted">你的数据保存在当前浏览器中。建议定期导出备份，换电脑或清缓存前请先保存。</p>
+            <div className="space-y-3">
+              <DataAction title="导出备份" note="下载一份 JSON 文件，保存到电脑" button="导出备份" onAction={exportBackup} />
+              <label className="block">
+                <DataAction title="导入备份" note="从之前导出的 JSON 文件恢复数据" button="选择文件" asLabel />
+                <input className="hidden" type="file" accept="application/json,.json" onChange={importBackup} />
+              </label>
+              {lastExportAt && <p className="rounded-2xl bg-[#f2f2f7] px-4 py-3 text-sm text-muted">上次导出：{formatDateTime(lastExportAt)}</p>}
+              <div className="rounded-[20px] border border-tomato/20 bg-[#fff7f6] p-3">
+                <p className="mb-2 text-sm font-semibold text-tomato">危险区域</p>
+                <div className="space-y-2">
+                  <DataAction title="清空数据" note="删除当前浏览器里的所有记录，此操作无法恢复" button="清空数据" danger onAction={clearAllData} />
+                  <DataAction title="恢复默认模板" note="恢复系统内置的常吃模板" button="恢复模板" danger onAction={restoreDefaultTemplates} />
+                </div>
+              </div>
+            </div>
+          </Card>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat title="本月吃喝总支出" value={money(stats.monthSpending)} />
-          <Stat title="本月预算剩余" value={money(stats.remainingBudget)} note={`预算 ${money(body.monthlyBudget)}`} />
-          <Stat title="今日建议可花" value={money(stats.budgetPerDay)} note={`按剩余 ${stats.remainingDaysInMonth} 天重算 · 今日还可花 ${money(stats.todayBudgetLeft)}`} />
-          <Stat title="本月平均每日支出" value={money(stats.monthAverageSpending)} />
-          <Stat title="本月总摄入热量" value={`${round(stats.monthIntake)} kcal`} />
-          <Stat title="本月平均每日摄入" value={`${round(stats.monthAverageIntake)} kcal`} />
-          <Stat title="本月饮料支出" value={money(stats.drinkSpending)} />
-          <Stat title="本月甜品支出" value={money(stats.dessertSpending)} />
-          <Stat title="本月外卖支出" value={money(stats.deliverySpending)} />
-          <Stat title="当前实际缺口" value={stats.hasFoodToday ? `${round(stats.todayDeficit)} kcal` : "未计算"} note={stats.hasFoodToday ? (stats.targetReached ? "已达成目标缺口" : `还差 ${round(body.targetDeficit - stats.todayDeficit)} kcal`) : "先记录吃喝后再计算"} />
-        </div>
-      </Card>
       </section>
-      )}
 
       {exerciseOpen && (
         <Modal title={editingExerciseId ? "编辑运动记录" : "记录运动"} onClose={closeExerciseModal}>
@@ -962,6 +1004,7 @@ function HomeApp({ userId }: { userId: string }) {
       )}
 
       {notice && <Toast message={notice} />}
+      {errorNotice && <Toast message={errorNotice} tone="error" />}
     </main>
   );
 }
@@ -969,6 +1012,105 @@ function HomeApp({ userId }: { userId: string }) {
 function stripId<T extends { id: string }>(item: T): Omit<T, "id"> {
   const { id: _id, ...rest } = item;
   return rest;
+}
+
+function StatusCard({
+  title,
+  value,
+  note,
+  strong = false
+}: {
+  title: string;
+  value: string;
+  note: string;
+  strong?: boolean;
+}) {
+  return (
+    <section className={`interactive-card hover-wave-card min-h-36 rounded-[22px] border border-white/70 bg-paper p-4 shadow-soft backdrop-blur-xl sm:min-h-40 sm:p-5 ${strong ? "ring-2 ring-mint/60" : ""}`}>
+      <div className="flex h-full flex-col justify-between gap-4">
+        <p className="text-sm font-semibold text-muted">{title}</p>
+        <div>
+          <p className="break-words text-2xl font-semibold leading-tight tracking-normal text-ink sm:text-3xl">{value}</p>
+          <p className="mt-3 text-xs leading-5 text-muted sm:text-sm">{note}</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function EmptyState({
+  title,
+  note,
+  action,
+  onAction,
+  compact = false,
+  className = ""
+}: {
+  title: string;
+  note: string;
+  action: string;
+  onAction: () => void;
+  compact?: boolean;
+  className?: string;
+}) {
+  return (
+    <section className={`interactive-card hover-wave-card rounded-[22px] border border-white/70 bg-paper p-4 shadow-soft backdrop-blur-xl ${compact ? "" : "sm:flex sm:items-center sm:justify-between sm:gap-4 sm:p-5"} ${className}`}>
+      <div>
+        <p className="font-semibold text-ink">{title}</p>
+        <p className="mt-1 text-sm leading-6 text-muted">{note}</p>
+      </div>
+      <button className={`btn-primary rounded-full px-5 py-2.5 text-sm font-semibold text-white ${compact ? "mt-3 w-full" : "mt-3 sm:mt-0"}`} onClick={onAction} type="button">
+        {action}
+      </button>
+    </section>
+  );
+}
+
+function MiniMetric({ title, value, note }: { title: string; value: string; note?: string }) {
+  return (
+    <div className="rounded-2xl bg-[#f2f2f7] p-3">
+      <p className="text-xs text-muted">{title}</p>
+      <p className="mt-1 break-words text-lg font-semibold text-ink">{value}</p>
+      {note && <p className="mt-1 text-xs leading-5 text-muted">{note}</p>}
+    </div>
+  );
+}
+
+function DataAction({
+  title,
+  note,
+  button,
+  onAction,
+  danger = false,
+  asLabel = false
+}: {
+  title: string;
+  note: string;
+  button: string;
+  onAction?: () => void;
+  danger?: boolean;
+  asLabel?: boolean;
+}) {
+  const actionClass = danger ? "btn-danger text-tomato" : "btn-secondary text-apple";
+  const control = asLabel ? (
+    <span className={`${actionClass} shrink-0 rounded-full px-4 py-2 text-sm font-semibold`}>{button}</span>
+  ) : (
+    <button className={`${actionClass} shrink-0 rounded-full px-4 py-2 text-sm font-semibold`} onClick={onAction} type="button">
+      {button}
+    </button>
+  );
+  const action = (
+    <div className="flex flex-col gap-3 rounded-[18px] bg-white/70 p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="text-sm font-semibold text-ink">{title}</p>
+        <p className="mt-1 text-xs leading-5 text-muted">{note}</p>
+      </div>
+      {control}
+    </div>
+  );
+
+  if (asLabel) return action;
+  return action;
 }
 
 function DateSwitcher({ selectedDate, onChange }: { selectedDate: string; onChange: (value: string) => void }) {
@@ -999,6 +1141,28 @@ function DateSwitcher({ selectedDate, onChange }: { selectedDate: string; onChan
         <input className="bg-transparent font-semibold text-ink outline-none" type="date" value={selectedDate} onChange={(event) => onChange(event.target.value)} />
       </label>
     </section>
+  );
+}
+
+function SectionHeader({
+  eyebrow,
+  title,
+  note,
+  className = ""
+}: {
+  eyebrow: string;
+  title: string;
+  note: string;
+  className?: string;
+}) {
+  return (
+    <div className={`mb-2 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between ${className}`}>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-apple">{eyebrow}</p>
+        <h2 className="mt-1 text-2xl font-semibold text-ink sm:text-3xl">{title}</h2>
+      </div>
+      <p className="max-w-md text-sm leading-6 text-muted sm:text-right">{note}</p>
+    </div>
   );
 }
 
@@ -1208,7 +1372,7 @@ function ProgressPanel({
   const isOver = ratio > 1;
 
   return (
-    <div className="rounded-[20px] bg-[#f5f5f7] p-4">
+    <div className="interactive-card rounded-[20px] border border-transparent bg-[#f5f5f7] p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-muted">{title}</p>
@@ -1246,7 +1410,7 @@ function DistributionPanel({
   const visibleItems = items.filter((item) => item.value > 0);
 
   return (
-    <div className={`rounded-[20px] bg-[#f5f5f7] p-4 ${className}`}>
+    <div className={`interactive-card rounded-[20px] border border-transparent bg-[#f5f5f7] p-4 ${className}`}>
       <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="font-semibold text-ink">{title}</h3>
         <span className="text-sm text-muted">合计 {formatter(total)}</span>
@@ -1291,7 +1455,7 @@ function DistributionPanel({
 
 function Card({ title, children, className = "" }: { title: string; children: React.ReactNode; className?: string }) {
   return (
-    <section className={`animate-[cardIn_0.28s_ease-out] rounded-[20px] border border-white/70 bg-paper p-4 shadow-soft backdrop-blur-xl transition hover:-translate-y-0.5 hover:shadow-[0_18px_50px_rgba(0,0,0,0.08)] sm:rounded-[22px] sm:p-5 ${className}`}>
+    <section className={`interactive-card hover-wave-card animate-[cardIn_0.28s_ease-out] rounded-[20px] border border-white/70 bg-paper p-4 shadow-soft backdrop-blur-xl sm:rounded-[22px] sm:p-5 ${className}`}>
       <h2 className="mb-4 text-lg font-semibold text-ink sm:text-xl">{title}</h2>
       {children}
     </section>
@@ -1300,7 +1464,7 @@ function Card({ title, children, className = "" }: { title: string; children: Re
 
 function Stat({ title, value, note, strong = false }: { title: string; value: string; note?: string; strong?: boolean }) {
   return (
-    <div className={`rounded-[22px] border border-white/70 bg-paper p-4 shadow-soft backdrop-blur-xl sm:p-5 ${strong ? "ring-2 ring-mint/70" : ""}`}>
+    <div className={`interactive-card rounded-[22px] border border-white/70 bg-paper p-4 shadow-soft backdrop-blur-xl sm:p-5 ${strong ? "ring-2 ring-mint/70" : ""}`}>
       <p className="text-xs font-medium text-muted sm:text-sm">{title}</p>
       <p className="mt-2 break-words text-2xl font-semibold tracking-normal text-ink sm:text-3xl">{value}</p>
       {note && <p className="mt-2 text-xs leading-5 text-muted sm:text-sm">{note}</p>}
@@ -1321,7 +1485,7 @@ function DashboardAction({
 }) {
   return (
     <button
-      className="min-h-36 rounded-[22px] border border-white/70 bg-paper p-4 text-left shadow-soft backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-white hover:shadow-[0_18px_50px_rgba(0,0,0,0.08)] active:scale-[0.98] sm:min-h-40 sm:p-5"
+      className="interactive-card hover-wave-card min-h-36 rounded-[22px] border border-white/70 bg-paper p-4 text-left shadow-soft backdrop-blur-xl active:scale-[0.98] sm:min-h-40 sm:p-5"
       onClick={onClick}
       type="button"
     >
@@ -1355,10 +1519,10 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
   );
 }
 
-function Toast({ message }: { message: string }) {
+function Toast({ message, tone = "success" }: { message: string; tone?: "success" | "error" }) {
   return (
     <div className="fixed inset-x-0 bottom-5 z-50 flex justify-center px-4">
-      <div className="animate-[toastIn_0.22s_ease-out] rounded-full bg-ink px-5 py-3 text-sm font-semibold text-white shadow-[0_16px_50px_rgba(0,0,0,0.2)]">
+      <div className={`animate-[toastIn_0.22s_ease-out] rounded-full px-5 py-3 text-sm font-semibold text-white shadow-[0_16px_50px_rgba(0,0,0,0.2)] ${tone === "error" ? "bg-tomato" : "bg-ink"}`}>
         {message}
       </div>
     </div>

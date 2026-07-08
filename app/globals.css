@@ -33,8 +33,95 @@ button {
   font: inherit;
 }
 
-button {
+button,
+label {
   -webkit-tap-highlight-color: transparent;
+}
+
+.interactive-card,
+.hover-wave-card,
+.wave-hover {
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 0.24s ease,
+    box-shadow 0.24s ease,
+    border-color 0.24s ease,
+    background-color 0.24s ease;
+}
+
+.interactive-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  border-color: rgba(48, 209, 88, 0.34);
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.09);
+}
+
+.hover-wave-card::after,
+.wave-hover::after {
+  content: "";
+  position: absolute;
+  inset: -35%;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(48, 209, 88, 0.11), transparent 58%);
+  opacity: 0;
+  transform: scale(0.74);
+}
+
+.hover-wave-card:hover::after,
+.wave-hover:hover::after {
+  animation: softWave 0.95s ease-out;
+}
+
+.btn-primary,
+.btn-dark,
+.btn-secondary,
+.btn-danger {
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease,
+    background-color 0.22s ease,
+    border-color 0.22s ease,
+    color 0.22s ease;
+}
+
+.btn-primary {
+  background: #007aff;
+  box-shadow: 0 10px 24px rgba(0, 122, 255, 0.24);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  background: #006fe6;
+  box-shadow: 0 14px 32px rgba(0, 122, 255, 0.3);
+}
+
+.btn-dark {
+  background: #1d1d1f;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+}
+
+.btn-dark:hover {
+  transform: translateY(-2px);
+  background: #000000;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.22);
+}
+
+.btn-secondary {
+  background: #f2f2f7;
+}
+
+.btn-secondary:hover {
+  background: #ffffff;
+}
+
+.btn-danger {
+  background: #fff1f0;
+  border: 1px solid rgba(255, 59, 48, 0.16);
+}
+
+.btn-danger:hover {
+  background: #ffe7e5;
+  border-color: rgba(255, 59, 48, 0.3);
 }
 
 ::selection {
@@ -71,5 +158,45 @@ button {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes softWave {
+  0% {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+  42% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.12);
+  }
+}
+
+@keyframes hoverFloat {
+  0%,
+  100% {
+    transform: translateY(-2px) scale(1);
+  }
+  50% {
+    transform: translateY(-4px) scale(1.006);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+
+  .interactive-card:hover,
+  .btn-primary:hover,
+  .btn-dark:hover {
+    transform: none;
   }
 }

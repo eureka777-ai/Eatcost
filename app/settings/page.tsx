@@ -202,28 +202,75 @@ function SettingsApp({ userId }: { userId: string }) {
         </div>
       </section>
 
-      <section className="mt-4 rounded-[22px] border border-white/70 bg-paper p-5 shadow-soft backdrop-blur-xl">
-        <h2 className="mb-4 text-xl font-semibold text-ink">数据管理</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <button className="rounded-2xl bg-[#f2f2f7] px-4 py-3 font-semibold text-apple transition hover:bg-white" type="button" onClick={exportJson}>
-            导出 JSON
-          </button>
-          <label className="cursor-pointer rounded-2xl bg-[#f2f2f7] px-4 py-3 text-center font-semibold text-apple transition hover:bg-white">
-            导入 JSON
+      <section className="wave-hover mt-4 rounded-[22px] border border-white/70 bg-paper p-5 shadow-soft backdrop-blur-xl">
+        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-apple">Backup</p>
+            <h2 className="mt-1 text-xl font-semibold text-ink">数据备份与迁移</h2>
+          </div>
+          <p className="text-sm leading-6 text-muted">换手机、重装、清空前，先从这里备份。</p>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-3">
+          <DataToolCard
+            title="导出备份"
+            note="把身体数据、吃喝记录、运动记录和常吃模板保存成一个 JSON 文件。"
+            action="下载 JSON"
+            onClick={exportJson}
+          />
+          <label className="wave-hover cursor-pointer rounded-[22px] bg-[#f2f2f7] p-4 transition hover:-translate-y-0.5 hover:bg-white">
+            <span className="block text-lg font-semibold text-ink">导入备份</span>
+            <span className="mt-2 block text-sm leading-6 text-muted">选择之前导出的 JSON 文件，恢复到当前账号的本地数据里。</span>
+            <span className="mt-4 inline-flex rounded-full bg-white px-4 py-2 text-sm font-semibold text-apple shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
+              选择 JSON
+            </span>
             <input className="hidden" type="file" accept="application/json,.json" onChange={importJson} />
           </label>
-          <button className="rounded-2xl bg-[#fff1f0] px-4 py-3 font-semibold text-tomato transition hover:bg-white" type="button" onClick={clearAllData}>
-            清空所有数据
-          </button>
+          <DataToolCard
+            title="清空数据"
+            note="删除当前账号在这台设备上的 Eatcost 数据。操作前会二次确认。"
+            action="清空所有数据"
+            danger
+            onClick={clearAllData}
+          />
         </div>
       </section>
     </main>
   );
 }
 
+function DataToolCard({
+  title,
+  note,
+  action,
+  danger = false,
+  onClick
+}: {
+  title: string;
+  note: string;
+  action: string;
+  danger?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <div className="wave-hover rounded-[22px] bg-[#f2f2f7] p-4 transition hover:-translate-y-0.5 hover:bg-white">
+      <h3 className="text-lg font-semibold text-ink">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-muted">{note}</p>
+      <button
+        className={`mt-4 rounded-full px-4 py-2 text-sm font-semibold shadow-[0_1px_2px_rgba(0,0,0,0.06)] ${
+          danger ? "bg-[#fff1f0] text-tomato" : "bg-white text-apple"
+        }`}
+        type="button"
+        onClick={onClick}
+      >
+        {action}
+      </button>
+    </div>
+  );
+}
+
 function Stat({ title, value }: { title: string; value: string }) {
   return (
-    <div className="rounded-[22px] border border-white/70 bg-paper p-5 shadow-soft backdrop-blur-xl">
+    <div className="wave-hover rounded-[22px] border border-white/70 bg-paper p-5 shadow-soft backdrop-blur-xl">
       <p className="text-sm font-medium text-muted">{title}</p>
       <p className="mt-2 text-3xl font-semibold text-ink">{value}</p>
     </div>
