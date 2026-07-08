@@ -121,7 +121,7 @@ const meals: Meal[] = ["早餐", "午餐", "晚餐", "加餐"];
 const sources: Source[] = ["外卖", "堂食", "自己做饭", "便利店", "咖啡店", "其他"];
 const payments: Payment[] = ["微信", "支付宝", "银行卡", "现金", "其他"];
 const calorieConfidences: CalorieConfidence[] = ["准确", "估算", "待补充"];
-const chartColors = ["#007aff", "#30d158", "#ff9500", "#af52de", "#ff3b30", "#8e8e93"];
+const chartColors = ["#007aff", "#5ac8fa", "#ff9500", "#af52de", "#ff3b30", "#8e8e93"];
 
 function dateByOffset(offset: number) {
   const date = new Date();
@@ -716,8 +716,8 @@ function HomeApp({ userId }: { userId: string }) {
           ].map(([section, label]) => (
             <button
               key={section}
-              className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition hover:-translate-y-0.5 hover:bg-mint/15 hover:text-mint ${
-                activeSection === section ? "bg-mint/15 text-mint" : "bg-[#f2f2f7] text-ink"
+              className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition hover:-translate-y-0.5 hover:bg-apple/10 hover:text-apple ${
+                activeSection === section ? "bg-apple text-white shadow-[0_10px_24px_rgba(0,122,255,0.22)]" : "bg-[#f2f2f7] text-ink"
               }`}
               onClick={() => scrollToSection(section as Section)}
               type="button"
@@ -755,57 +755,105 @@ function HomeApp({ userId }: { userId: string }) {
       </section>
 
       <section id="section-record" className="scroll-mt-4">
-        <SectionHeader eyebrow="Record" title="快速记录" note="常吃、手动记录、运动和时间线都收在这里。" className="mt-7" />
-        <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
-          <Card title="常吃快捷">
-            {templates.length === 0 ? (
-              <EmptyState title="常吃模板空了。" note="恢复系统默认模板，先把记录入口铺起来。" action="恢复默认模板" onAction={restoreDefaultTemplates} compact />
-            ) : (
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {templates.map((item) => (
-                  <div key={item.id} className="shrink-0 rounded-[22px] bg-[#f2f2f7] p-2">
-                    <button
-                      className="block min-w-32 rounded-2xl px-2 py-1 text-left transition hover:bg-white"
-                      onClick={() =>
-                        setFoodForm({
-                          ...foodForm,
-                          name: item.name,
-                          amount: item.amount,
-                          calories: item.calories,
-                          calorieConfidence: item.calorieConfidence,
-                          category: item.category
-                        })
-                      }
-                      type="button"
-                    >
-                      <span className="block text-sm font-semibold text-ink">{item.name}</span>
-                      <span className="text-xs text-muted">{money(item.amount)} · {calorieText(item)}</span>
-                    </button>
-                    <div className="mt-1 flex gap-1">
-                      <button className="btn-secondary rounded-full px-3 py-1 text-xs font-medium text-apple" type="button" onClick={() => editTemplate(item)}>
-                        编辑
-                      </button>
-                      <button
-                        className="btn-danger rounded-full px-3 py-1 text-xs font-medium"
-                        type="button"
-                        onClick={() => setPendingDelete({ type: "template", id: item.id, name: item.name })}
-                      >
-                        删除
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-
-          <Card title="今天还能吃什么">
-            <TemplateSuggestions remainingIntake={stats.remainingIntake} remainingBudget={stats.todayBudgetLeft} templates={templates} />
-          </Card>
-        </div>
-
-        <div className="mt-3 grid gap-3 lg:grid-cols-[1.45fr_0.85fr]">
+        <SectionHeader eyebrow="Record" title="快速记录" note="记录吃喝是主入口，常吃和拍照都放在同一张卡里。" className="mt-7" />
+        <div className="grid gap-3 lg:grid-cols-[1.45fr_0.85fr]">
           <Card title="手动记录吃喝">
+            <div className="mb-4 rounded-[18px] bg-[#f5f5f7] p-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-ink">拍照估算热量</p>
+                  <p className="mt-1 text-xs leading-5 text-muted">照片识别只帮你预填名称和热量，价格还是你自己确认。</p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <label className="btn-secondary cursor-pointer rounded-full px-4 py-2 text-center text-sm font-semibold text-apple">
+                    {aiLoading ? "识别中..." : "拍照"}
+                    <input
+                      className="hidden"
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      disabled={aiLoading}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) analyzeMealPhoto(file);
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                  </label>
+                  <label className="btn-secondary cursor-pointer rounded-full px-4 py-2 text-center text-sm font-semibold text-apple">
+                    上传
+                    <input
+                      className="hidden"
+                      type="file"
+                      accept="image/*"
+                      disabled={aiLoading}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) analyzeMealPhoto(file);
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+              {aiEstimate && (
+                <div className="mt-3 rounded-2xl bg-white p-3 text-sm text-muted">
+                  <span className="font-semibold text-ink">{aiEstimate.name}</span> · 约 {aiEstimate.calories} kcal · 可信度 {aiEstimate.confidence}
+                  {aiEstimate.note && <p className="mt-1">{aiEstimate.note}</p>}
+                </div>
+              )}
+              {aiError && <p className="mt-3 rounded-2xl bg-[#fff1f0] p-3 text-sm text-tomato">{aiError}</p>}
+            </div>
+
+            <div className="mb-4 border-y border-line/70 py-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-ink">常吃快捷</p>
+                  <p className="mt-0.5 text-xs text-muted">点一下自动填入，也可以编辑模板。</p>
+                </div>
+                {templates.length > 0 && <span className="rounded-full bg-[#f2f2f7] px-3 py-1 text-xs text-muted">{templates.length} 个模板</span>}
+              </div>
+              {templates.length === 0 ? (
+                <EmptyState title="常吃模板空了。" note="恢复系统默认模板，先把记录入口铺起来。" action="恢复默认模板" onAction={restoreDefaultTemplates} compact />
+              ) : (
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {templates.map((item) => (
+                    <div key={item.id} className="shrink-0 rounded-[18px] bg-[#f2f2f7] p-2">
+                      <button
+                        className="block min-w-28 rounded-2xl px-2 py-1 text-left transition hover:bg-white"
+                        onClick={() =>
+                          setFoodForm({
+                            ...foodForm,
+                            name: item.name,
+                            amount: item.amount,
+                            calories: item.calories,
+                            calorieConfidence: item.calorieConfidence,
+                            category: item.category
+                          })
+                        }
+                        type="button"
+                      >
+                        <span className="block text-sm font-semibold text-ink">{item.name}</span>
+                        <span className="text-xs text-muted">{money(item.amount)} · {calorieText(item)}</span>
+                      </button>
+                      <div className="mt-1 flex gap-1">
+                        <button className="btn-secondary rounded-full px-3 py-1 text-xs font-medium text-apple" type="button" onClick={() => editTemplate(item)}>
+                          编辑
+                        </button>
+                        <button
+                          className="btn-danger rounded-full px-3 py-1 text-xs font-medium"
+                          type="button"
+                          onClick={() => setPendingDelete({ type: "template", id: item.id, name: item.name })}
+                        >
+                          删除
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <form className="grid gap-3 sm:grid-cols-2" onSubmit={saveFood}>
               <Text label="名称" value={foodForm.name} onChange={(value) => setFoodForm({ ...foodForm, name: value })} />
               <Field label="金额" value={foodForm.amount} step="0.01" onChange={(value) => setFoodForm({ ...foodForm, amount: Number(value) })} />
@@ -850,12 +898,18 @@ function HomeApp({ userId }: { userId: string }) {
             </form>
           </Card>
 
-          <Card title="记录运动">
-            <p className="mb-4 text-sm leading-6 text-muted">运动不是每天必填，所以默认收起来，需要时再打开。</p>
-            <button className="btn-dark w-full rounded-2xl px-5 py-3 font-semibold text-white" onClick={openExerciseModal} type="button">
-              + 记录运动
-            </button>
-          </Card>
+          <div className="grid gap-3">
+            <Card title="今天还能吃什么">
+              <TemplateSuggestions remainingIntake={stats.remainingIntake} remainingBudget={stats.todayBudgetLeft} templates={templates} />
+            </Card>
+
+            <Card title="记录运动">
+              <p className="mb-4 text-sm leading-6 text-muted">运动不是每天必填，需要时再补一条消耗。</p>
+              <button className="btn-dark w-full rounded-2xl px-5 py-3 font-semibold text-white" onClick={openExerciseModal} type="button">
+                + 记录运动
+              </button>
+            </Card>
+          </div>
         </div>
 
         <Card title={`${selectedDateLabel(selectedDate)}时间线`} className="mt-3">
@@ -912,7 +966,7 @@ function HomeApp({ userId }: { userId: string }) {
 
         <Card title="可视化洞察" className="mt-3">
           <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
-            <ProgressPanel title="今日热量进度" value={`${round(stats.todayIntake)} / ${metrics.suggestedIntake} kcal`} note={`剩余 ${round(stats.remainingIntake)} kcal`} ratio={stats.calorieProgressRatio} color="#30d158" />
+            <ProgressPanel title="今日热量进度" value={`${round(stats.todayIntake)} / ${metrics.suggestedIntake} kcal`} note={`剩余 ${round(stats.remainingIntake)} kcal`} ratio={stats.calorieProgressRatio} color="#007aff" />
             <ProgressPanel title="本月预算进度" value={`${money(stats.monthSpending)} / ${money(body.monthlyBudget)}`} note={`剩余 ${money(stats.remainingBudget)}`} ratio={stats.budgetSpentRatio} color="#007aff" />
             <DistributionPanel title="本月支出构成" emptyText="本月还没有吃喝支出" items={stats.categorySpending} formatter={money} />
             <DistributionPanel title="今日热量构成" emptyText="今天还没有记录热量" items={stats.mealCalories} formatter={(value) => `${round(value)} kcal`} />
@@ -1026,7 +1080,7 @@ function StatusCard({
   strong?: boolean;
 }) {
   return (
-    <section className={`interactive-card hover-wave-card min-h-36 rounded-[22px] border border-white/70 bg-paper p-4 shadow-soft backdrop-blur-xl sm:min-h-40 sm:p-5 ${strong ? "ring-2 ring-mint/60" : ""}`}>
+    <section className={`interactive-card hover-wave-card min-h-36 rounded-[22px] border border-white/70 bg-paper p-4 shadow-soft backdrop-blur-xl sm:min-h-40 sm:p-5 ${strong ? "ring-2 ring-apple/45" : ""}`}>
       <div className="flex h-full flex-col justify-between gap-4">
         <p className="text-sm font-semibold text-muted">{title}</p>
         <div>
@@ -1464,7 +1518,7 @@ function Card({ title, children, className = "" }: { title: string; children: Re
 
 function Stat({ title, value, note, strong = false }: { title: string; value: string; note?: string; strong?: boolean }) {
   return (
-    <div className={`interactive-card rounded-[22px] border border-white/70 bg-paper p-4 shadow-soft backdrop-blur-xl sm:p-5 ${strong ? "ring-2 ring-mint/70" : ""}`}>
+    <div className={`interactive-card rounded-[22px] border border-white/70 bg-paper p-4 shadow-soft backdrop-blur-xl sm:p-5 ${strong ? "ring-2 ring-apple/45" : ""}`}>
       <p className="text-xs font-medium text-muted sm:text-sm">{title}</p>
       <p className="mt-2 break-words text-2xl font-semibold tracking-normal text-ink sm:text-3xl">{value}</p>
       {note && <p className="mt-2 text-xs leading-5 text-muted sm:text-sm">{note}</p>}
