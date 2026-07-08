@@ -132,7 +132,6 @@ export default function Home() {
   const [exerciseForm, setExerciseForm] = useState(defaultExercise);
   const [editingFoodId, setEditingFoodId] = useState<string | null>(null);
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
-  const [bodyOpen, setBodyOpen] = useState(false);
   const [foodMoreOpen, setFoodMoreOpen] = useState(false);
   const [exerciseOpen, setExerciseOpen] = useState(false);
 
@@ -243,12 +242,17 @@ export default function Home() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:py-10">
-      <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-apple">Eatcost</p>
-          <h1 className="text-3xl font-semibold text-ink sm:text-5xl">今天还能吃多少？</h1>
+          <h1 className="text-5xl font-semibold text-ink sm:text-7xl">Eatcost</h1>
+          <p className="mt-3 text-xl font-semibold text-ink sm:text-2xl">今天吃了多少钱？</p>
         </div>
-        <p className="max-w-sm text-sm leading-6 text-muted sm:text-right">记录吃喝、热量和运动，顺手看看今天还能花多少钱。</p>
+        <div className="flex flex-col gap-3 sm:items-end">
+          <p className="max-w-sm text-sm leading-6 text-muted sm:text-right">打开就记一餐，顺手看看今天还能吃多少、还能花多少钱。</p>
+          <a className="w-fit rounded-full bg-[#f2f2f7] px-4 py-2 text-sm font-medium text-apple transition hover:bg-white" href="/settings">
+            设置身体数据和预算
+          </a>
+        </div>
       </header>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -409,33 +413,6 @@ export default function Home() {
         </div>
       </Card>
 
-      <section className="mt-4 overflow-hidden rounded-[22px] border border-white/70 bg-paper shadow-soft backdrop-blur-xl">
-        <button
-          className="flex w-full items-center justify-between gap-4 px-5 py-5 text-left transition hover:bg-white/50"
-          onClick={() => setBodyOpen((open) => !open)}
-        >
-          <span>
-            <span className="block text-base font-semibold text-ink">身体数据、热量目标和预算</span>
-            <span className="mt-1 block text-sm text-muted">
-              BMR {metrics.bmr} kcal · TDEE {metrics.tdee} kcal · 建议摄入 {metrics.suggestedIntake} kcal · 月预算 {money(body.monthlyBudget)}
-            </span>
-          </span>
-          <span className="shrink-0 rounded-full bg-[#f2f2f7] px-3 py-1 text-sm font-medium text-muted">{bodyOpen ? "收起" : "展开"}</span>
-        </button>
-        {bodyOpen && (
-          <div className="grid gap-3 border-t border-line/70 p-5 sm:grid-cols-2 lg:grid-cols-4">
-            <Select label="性别" value={body.gender} options={["女", "男"]} onChange={(value) => setBody({ ...body, gender: value as BodyData["gender"] })} />
-            <Field label="年龄" value={body.age} onChange={(value) => setBody({ ...body, age: Number(value) })} />
-            <Field label="身高 cm" value={body.height} onChange={(value) => setBody({ ...body, height: Number(value) })} />
-            <Field label="当前体重 kg" value={body.currentWeight} onChange={(value) => setBody({ ...body, currentWeight: Number(value) })} />
-            <Field label="目标体重 kg" value={body.targetWeight} onChange={(value) => setBody({ ...body, targetWeight: Number(value) })} />
-            <Select label="活动水平" value={body.activity} options={Object.keys(activityFactors)} onChange={(value) => setBody({ ...body, activity: value as Activity })} />
-            <Select label="目标" value={body.goal} options={["维持体重", "减重", "增重"]} onChange={(value) => setBody({ ...body, goal: value as Goal })} />
-            <Field label="期望每日热量缺口 kcal" value={body.targetDeficit} onChange={(value) => setBody({ ...body, targetDeficit: Number(value) })} />
-            <Field label="本月吃喝预算 ¥" value={body.monthlyBudget} step="1" onChange={(value) => setBody({ ...body, monthlyBudget: Number(value) })} />
-          </div>
-        )}
-      </section>
     </main>
   );
 }
