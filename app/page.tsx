@@ -340,6 +340,12 @@ function HomeApp({ userId }: { userId: string }) {
     setEditingExerciseId(null);
   }
 
+  function openSection(section: Section, options?: { openExercise?: boolean }) {
+    setActiveSection(section);
+    if (options?.openExercise) setExerciseOpen(true);
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+  }
+
   async function analyzeMealPhoto(file: File) {
     if (!file.type.startsWith("image/")) {
       setAiError("请上传图片文件");
@@ -414,10 +420,31 @@ function HomeApp({ userId }: { userId: string }) {
       </nav>
 
       <section className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
-        <Stat title="今日已摄入" value={`${round(stats.todayIntake)} / ${metrics.suggestedIntake} kcal`} note={stats.hasFoodToday ? "已开始记录今日吃喝" : "今日还没有记录吃喝"} />
-        <Stat title="今日剩余可吃" value={`${round(stats.remainingIntake)} kcal`} note="先看这个，再决定下一口" strong />
-        <Stat title="今日运动消耗" value={`${round(stats.todayExercise)} kcal`} note="额外运动消耗" />
-        <Stat title="今日吃喝支出" value={`${money(stats.todaySpending)} / ${money(stats.budgetPerDay)}`} note={`本月剩余 ${money(stats.remainingBudget)}`} />
+        <DashboardAction
+          title="记一餐"
+          value={`${round(stats.todayIntake)} / ${metrics.suggestedIntake} kcal`}
+          note={stats.hasFoodToday ? "记录今天吃了什么" : "点这里快速记录吃喝"}
+          onClick={() => openSection("record")}
+        />
+        <DashboardAction
+          title="看热量"
+          value={`${round(stats.remainingIntake)} kcal`}
+          note="今天剩余可吃"
+          strong
+          onClick={() => openSection("insights")}
+        />
+        <DashboardAction
+          title="记运动"
+          value={`${round(stats.todayExercise)} kcal`}
+          note="记录额外消耗"
+          onClick={() => openSection("record", { openExercise: true })}
+        />
+        <DashboardAction
+          title="看支出"
+          value={`${money(stats.todaySpending)} / ${money(stats.budgetPerDay)}`}
+          note={`本月剩余 ${money(stats.remainingBudget)}`}
+          onClick={() => openSection("month")}
+        />
       </section>
 
       {activeSection === "record" && (
@@ -870,6 +897,41 @@ function Stat({ title, value, note, strong = false }: { title: string; value: st
       <p className="mt-2 break-words text-2xl font-semibold tracking-normal text-ink sm:text-3xl">{value}</p>
       {note && <p className="mt-2 text-xs leading-5 text-muted sm:text-sm">{note}</p>}
     </div>
+  );
+}
+
+function DashboardAction({
+  title,
+  value,
+  note,
+  onClick,
+  strong = false
+}: {
+  title: string;
+  value: string;
+  note: string;
+  onClick: () => void;
+  strong?: boolean;
+}) {
+  return (
+    <button
+      className={`min-h-36 rounded-[22px] border border-white/70 bg-paper p-4 text-left shadow-soft backdrop-blur-xl transition active:scale-[0.98] sm:min-h-40 sm:p-5 ${
+        strong ? "ring-2 ring-mint/70" : ""
+      } hover:bg-white`}
+      onClick={onClick}
+      type="button"
+    >
+      <div className="flex h-full flex-col justify-between gap-4">
+        <div>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-ink">{title}</p>
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#f2f2f7] text-sm font-semibold text-apple">›</span>
+          </div>
+          <p className="break-words text-2xl font-semibold leading-tight tracking-normal text-ink sm:text-3xl">{value}</p>
+        </div>
+        <p className="text-xs leading-5 text-muted sm:text-sm">{note}</p>
+      </div>
+    </button>
   );
 }
 
