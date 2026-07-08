@@ -4,9 +4,9 @@ module.exports = async function handler(request, response) {
     return;
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.ARK_API_KEY;
   if (!apiKey) {
-    response.status(500).json({ error: "还没有配置 GEMINI_API_KEY" });
+    response.status(500).json({ error: "还没有配置 ARK_API_KEY" });
     return;
   }
 
@@ -18,7 +18,6 @@ module.exports = async function handler(request, response) {
       return;
     }
 
-    const { mimeType, base64 } = parseDataUrl(image);
     const prompt = [
       "你是一个谨慎的食物热量估算助手。",
       "请根据图片估算这餐的主要名称、总热量 kcal、分类和可信度。",
@@ -28,43 +27,53 @@ module.exports = async function handler(request, response) {
       'JSON 格式：{"name":"牛肉粉","calories":650,"category":"正餐","confidence":"中","note":"按普通一碗估算"}'
     ].join("\n");
 
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${process.env.GEMINI_MODEL || "gemini-2.5-flash"}:generateContent?key=${apiKey}`,
-      {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 35000);
+    let arkResponse;
+    const baseUrl = normalizeBaseUrl(process.env.ARK_BASE_URL);
+
+    try {
+      arkResponse = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        signal: controller.signal,
         body: JSON.stringify({
-          contents: [
+          model: process.env.ARK_MODEL || "doubao-1-5-vision-pro-32k-250115",
+          temperature: 0.2,
+          response_format: { type: "json_object" },
+          messages: [
             {
               role: "user",
-              parts: [
-                { text: prompt },
+              content: [
+                { type: "text", text: prompt },
                 {
-                  inline_data: {
-                    mime_type: mimeType,
-                    data: base64
+                  type: "image_url",
+                  image_url: {
+                    url: image
                   }
                 }
               ]
             }
-          ],
-          generationConfig: {
-            temperature: 0.2,
-            response_mime_type: "application/json"
-          }
+          ]
         })
-      }
-    );
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
-    const result = await geminiResponse.json();
-    if (!geminiResponse.ok) {
-      response.status(geminiResponse.status).json({
-        error: result.error?.message || "Gemini 识别失败"
+    const result = await arkResponse.json().catch(() => ({}));
+    if (!arkResponse.ok) {
+      const message = result.error?.message || result.message || "";
+      response.status(arkResponse.status).json({
+        error: friendlyArkError(message)
       });
       return;
     }
 
-    const text = result.candidates?.[0]?.content?.parts?.find((part) => part.text)?.text;
+    const text = result.choices?.[0]?.message?.content;
     if (!text) {
       response.status(502).json({ error: "AI 没有返回可解析结果" });
       return;
@@ -79,16 +88,28 @@ module.exports = async function handler(request, response) {
       note: estimate.note || "照片估算仅供参考，建议按实际份量微调。"
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "";
     response.status(500).json({
-      error: error instanceof Error ? error.message : "服务器处理失败"
+      error:
+        error instanceof Error && error.name === "AbortError"
+          ? "豆包接口响应超时，请稍后重试或检查模型接入点"
+          : friendlyArkError(message || "服务器处理失败")
     });
   }
 };
 
-function parseDataUrl(dataUrl) {
-  const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
-  if (!match) throw new Error("图片格式不正确");
-  return { mimeType: match[1], base64: match[2] };
+function normalizeBaseUrl(value) {
+  const fallback = "https://ark.cn-beijing.volces.com/api/v3";
+  const baseUrl = String(value || fallback).trim().replace(/\/+$/, "");
+  return /^https?:\/\//.test(baseUrl) ? baseUrl : fallback;
+}
+
+function friendlyArkError(message) {
+  if (message.includes("expected pattern") || message.includes("did not match")) {
+    return "豆包没有接受当前图片或接口格式。请确认 ARK_MODEL 填的是视觉模型的接入点 ID，ARK_BASE_URL 可以先留空。";
+  }
+
+  return message || "豆包识别失败，请检查 ARK_MODEL 是否是视觉模型接入点";
 }
 
 function stripCodeFence(text) {

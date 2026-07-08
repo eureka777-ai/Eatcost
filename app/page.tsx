@@ -137,11 +137,50 @@ function loadState<T>(key: string, fallback: T): T {
 
 function fileToDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("图片读取失败"));
-    reader.readAsDataURL(file);
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+
+    image.onload = () => {
+      try {
+        const maxSide = 768;
+        const ratio = Math.min(maxSide / image.width, maxSide / image.height, 1);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(image.width * ratio);
+        canvas.height = Math.round(image.height * ratio);
+        const context = canvas.getContext("2d");
+        if (!context) {
+          reject(new Error("图片压缩失败"));
+          return;
+        }
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.72));
+      } catch {
+        reject(new Error("这张图片格式暂时读不了，请换一张照片再试"));
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("图片读取失败，请换一张更清晰的照片"));
+    };
+
+    image.src = objectUrl;
   });
+}
+
+function friendlyAiError(error: unknown) {
+  if (error instanceof Error && error.name === "AbortError") {
+    return "识别超时了，请换一张更清晰的照片或稍后再试";
+  }
+
+  const message = error instanceof Error ? error.message : "识别失败，请稍后再试";
+  if (message.includes("expected pattern") || message.includes("did not match")) {
+    return "图片或豆包接口格式没有被接受。请检查模型接入点是不是视觉模型，或者换一张照片再试。";
+  }
+
+  return message;
 }
 
 export default function Home() {
@@ -286,17 +325,25 @@ export default function Home() {
   }
 
   async function analyzeMealPhoto(file: File) {
+    if (!file.type.startsWith("image/")) {
+      setAiError("请上传图片文件");
+      return;
+    }
+
     setAiLoading(true);
     setAiError("");
     setAiEstimate(null);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 45000);
     try {
       const image = await fileToDataUrl(file);
       const response = await fetch("/api/analyze-meal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image })
+        body: JSON.stringify({ image }),
+        signal: controller.signal
       });
-      const data = await response.json();
+      const data = await response.json().catch(() => ({ error: "服务器没有返回有效结果" }));
       if (!response.ok) throw new Error(data.error || "识别失败");
       const estimate = data as MealEstimate;
       setAiEstimate(estimate);
@@ -307,8 +354,9 @@ export default function Home() {
         category: estimate.category || current.category
       }));
     } catch (error) {
-      setAiError(error instanceof Error ? error.message : "识别失败，请稍后再试");
+      setAiError(friendlyAiError(error));
     } finally {
+      window.clearTimeout(timeout);
       setAiLoading(false);
     }
   }
