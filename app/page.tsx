@@ -142,7 +142,7 @@ function fileToDataUrl(file: File) {
 
     image.onload = () => {
       try {
-        const maxSide = 768;
+        const maxSide = 640;
         const ratio = Math.min(maxSide / image.width, maxSide / image.height, 1);
         const canvas = document.createElement("canvas");
         canvas.width = Math.round(image.width * ratio);
@@ -153,7 +153,7 @@ function fileToDataUrl(file: File) {
           return;
         }
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/jpeg", 0.72));
+        resolve(canvas.toDataURL("image/jpeg", 0.62));
       } catch {
         reject(new Error("这张图片格式暂时读不了，请换一张照片再试"));
       } finally {
@@ -177,7 +177,7 @@ function friendlyAiError(error: unknown) {
 
   const message = error instanceof Error ? error.message : "识别失败，请稍后再试";
   if (message.includes("expected pattern") || message.includes("did not match")) {
-    return "图片或豆包接口格式没有被接受。请检查模型接入点是不是视觉模型，或者换一张照片再试。";
+    return "图片或豆包接口格式没有被接受。请确认 ARK_MODEL 是 doubao-seed-1-6-flash-250828，或者换一张照片再试。";
   }
 
   return message;

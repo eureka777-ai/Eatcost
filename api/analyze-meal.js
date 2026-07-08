@@ -33,7 +33,7 @@ module.exports = async function handler(request, response) {
     const baseUrl = normalizeBaseUrl(process.env.ARK_BASE_URL);
 
     try {
-      arkResponse = await fetch(`${baseUrl}/chat/completions`, {
+      arkResponse = await fetch(`${baseUrl}/responses`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -41,20 +41,17 @@ module.exports = async function handler(request, response) {
         },
         signal: controller.signal,
         body: JSON.stringify({
-          model: process.env.ARK_MODEL || "doubao-1-5-vision-pro-32k-250115",
+          model: process.env.ARK_MODEL || "doubao-seed-1-6-flash-250828",
           temperature: 0.2,
-          response_format: { type: "json_object" },
-          messages: [
+          input: [
             {
               role: "user",
               content: [
-                { type: "text", text: prompt },
                 {
-                  type: "image_url",
-                  image_url: {
-                    url: image
-                  }
-                }
+                  type: "input_image",
+                  image_url: image
+                },
+                { type: "input_text", text: prompt }
               ]
             }
           ]
@@ -73,7 +70,7 @@ module.exports = async function handler(request, response) {
       return;
     }
 
-    const text = result.choices?.[0]?.message?.content;
+    const text = extractResponseText(result);
     if (!text) {
       response.status(502).json({ error: "AI 没有返回可解析结果" });
       return;
@@ -106,10 +103,25 @@ function normalizeBaseUrl(value) {
 
 function friendlyArkError(message) {
   if (message.includes("expected pattern") || message.includes("did not match")) {
-    return "豆包没有接受当前图片或接口格式。请确认 ARK_MODEL 填的是视觉模型的接入点 ID，ARK_BASE_URL 可以先留空。";
+    return "豆包没有接受当前图片或接口格式。请确认 ARK_MODEL 填的是 doubao-seed-1-6-flash-250828，ARK_BASE_URL 可以先留空。";
+  }
+
+  if (message.includes("timed out") || message.includes("timeout") || message.includes("超时")) {
+    return "豆包接口响应超时，请稍后再试，或换一张更清晰的小图。";
   }
 
   return message || "豆包识别失败，请检查 ARK_MODEL 是否是视觉模型接入点";
+}
+
+function extractResponseText(result) {
+  if (typeof result.output_text === "string") return result.output_text;
+
+  const content = result.output?.flatMap((item) => item.content || []) || [];
+  const textItem = content.find((item) => typeof item.text === "string");
+  if (textItem) return textItem.text;
+
+  const legacyText = result.choices?.[0]?.message?.content;
+  return typeof legacyText === "string" ? legacyText : "";
 }
 
 function stripCodeFence(text) {
