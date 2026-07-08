@@ -98,16 +98,7 @@ const defaultExercise: Omit<ExerciseRecord, "id"> = {
   note: ""
 };
 
-const defaultTemplates: FoodTemplate[] = [
-  { id: "template-rice", name: "米饭一份", amount: 1, calories: 180, calorieConfidence: "估算", category: "正餐" },
-  { id: "template-soy", name: "豆浆 200ml", amount: 3, calories: 90, calorieConfidence: "估算", category: "饮料" },
-  { id: "template-milk-tea", name: "奶茶", amount: 18, calories: 350, calorieConfidence: "估算", category: "饮料" },
-  { id: "template-pudding", name: "布丁", amount: 6, calories: 120, calorieConfidence: "估算", category: "甜品" },
-  { id: "template-noodle", name: "牛肉粉", amount: 18, calories: 650, calorieConfidence: "估算", category: "正餐" },
-  { id: "template-chicken", name: "鸡胸肉饭", amount: 25, calories: 500, calorieConfidence: "估算", category: "正餐" },
-  { id: "template-coffee", name: "美式咖啡", amount: 15, calories: 10, calorieConfidence: "估算", category: "饮料" },
-  { id: "template-fruit", name: "水果一份", amount: 8, calories: 100, calorieConfidence: "估算", category: "水果" }
-];
+const defaultTemplates: FoodTemplate[] = [];
 
 const activityFactors: Record<Activity, number> = {
   久坐: 1.2,
@@ -628,6 +619,53 @@ function HomeApp({ userId }: { userId: string }) {
     }
   }
 
+  async function importTemplateFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+
+    try {
+      const parsed = JSON.parse(await file.text());
+      const templateSource = Array.isArray(parsed) ? parsed : parsed?.templates;
+      if (!Array.isArray(templateSource)) {
+        setErrorNotice("导入失败，请检查模板文件格式");
+        return;
+      }
+
+      const nextTemplates: FoodTemplate[] = templateSource
+        .filter((item) => item && typeof item.name === "string")
+        .map((item, index) => ({
+          id: item.id || `imported-template-${Date.now()}-${index}`,
+          name: item.name,
+          amount: Number(item.amount || 0),
+          calories: item.calories === "" || item.calories === undefined ? "" : Number(item.calories || 0),
+          calorieConfidence: item.calorieConfidence || (item.calories === "" ? "待补充" : "估算"),
+          category: categories.includes(item.category) ? item.category : "其他"
+        }));
+
+      if (nextTemplates.length === 0) {
+        setErrorNotice("导入失败，请检查模板文件格式");
+        return;
+      }
+
+      const confirmed = window.confirm(`将导入 ${nextTemplates.length} 个常吃模板，并替换当前模板，确定继续吗？`);
+      if (!confirmed) return;
+      setTemplates(normalizeTemplates(nextTemplates));
+      setEditingTemplateId(null);
+      setNotice("模板已导入");
+    } catch {
+      setErrorNotice("导入失败，请检查模板文件格式");
+    }
+  }
+
+  function clearTemplates() {
+    const confirmed = window.confirm("确定清空当前所有常吃模板吗？之后可以重新导入或把记录保存为模板。");
+    if (!confirmed) return;
+    setTemplates([]);
+    setEditingTemplateId(null);
+    setNotice("常吃模板已清空");
+  }
+
   function clearAllData() {
     const first = window.confirm("清空数据会删除当前浏览器里的所有记录，此操作无法恢复。确定继续吗？");
     if (!first) return;
@@ -806,15 +844,28 @@ function HomeApp({ userId }: { userId: string }) {
             </div>
 
             <div className="mb-4 border-y border-line/70 py-3">
-              <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-semibold text-ink">常吃快捷</p>
-                  <p className="mt-0.5 text-xs text-muted">点一下自动填入，也可以编辑模板。</p>
+                  <p className="mt-0.5 text-xs text-muted">导入自己的常吃模板，或把当前记录保存成模板。</p>
                 </div>
-                {templates.length > 0 && <span className="rounded-full bg-[#f2f2f7] px-3 py-1 text-xs text-muted">{templates.length} 个模板</span>}
+                <div className="flex flex-wrap gap-2">
+                  <label className="btn-secondary cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold text-apple">
+                    导入模板
+                    <input className="hidden" type="file" accept="application/json,.json" onChange={importTemplateFile} />
+                  </label>
+                  {templates.length > 0 && (
+                    <button className="btn-danger rounded-full px-3 py-1.5 text-xs font-semibold" type="button" onClick={clearTemplates}>
+                      清空模板
+                    </button>
+                  )}
+                </div>
               </div>
               {templates.length === 0 ? (
-                <EmptyState title="常吃模板空了。" note="恢复系统默认模板，先把记录入口铺起来。" action="恢复默认模板" onAction={restoreDefaultTemplates} compact />
+                <div className="rounded-[18px] bg-[#f5f5f7] p-4">
+                  <p className="text-sm font-semibold text-ink">还没有常吃模板。</p>
+                  <p className="mt-1 text-xs leading-5 text-muted">可以导入 JSON 模板，也可以先手动填一餐，再点“把当前内容存为常吃模板”。</p>
+                </div>
               ) : (
                 <div className="flex gap-2 overflow-x-auto pb-1">
                   {templates.map((item) => (
@@ -966,8 +1017,8 @@ function HomeApp({ userId }: { userId: string }) {
 
         <Card title="可视化洞察" className="mt-3">
           <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
-            <ProgressPanel title="今日热量进度" value={`${round(stats.todayIntake)} / ${metrics.suggestedIntake} kcal`} note={`剩余 ${round(stats.remainingIntake)} kcal`} ratio={stats.calorieProgressRatio} color="#007aff" />
-            <ProgressPanel title="本月预算进度" value={`${money(stats.monthSpending)} / ${money(body.monthlyBudget)}`} note={`剩余 ${money(stats.remainingBudget)}`} ratio={stats.budgetSpentRatio} color="#007aff" />
+            <RingPanel title="今日热量进度" value={`${round(stats.todayIntake)} / ${metrics.suggestedIntake} kcal`} note={`剩余 ${round(stats.remainingIntake)} kcal`} ratio={stats.calorieProgressRatio} color="#007aff" />
+            <RingPanel title="本月预算进度" value={`${money(stats.monthSpending)} / ${money(body.monthlyBudget)}`} note={`剩余 ${money(stats.remainingBudget)}`} ratio={stats.budgetSpentRatio} color="#ff9500" />
             <DistributionPanel title="本月支出构成" emptyText="本月还没有吃喝支出" items={stats.categorySpending} formatter={money} />
             <DistributionPanel title="今日热量构成" emptyText="今天还没有记录热量" items={stats.mealCalories} formatter={(value) => `${round(value)} kcal`} />
             <DistributionPanel title="本月来源构成" emptyText="本月还没有来源记录" items={stats.sourceSpending} formatter={money} className="lg:col-span-2" />
@@ -1020,7 +1071,7 @@ function HomeApp({ userId }: { userId: string }) {
                 <p className="mb-2 text-sm font-semibold text-tomato">危险区域</p>
                 <div className="space-y-2">
                   <DataAction title="清空数据" note="删除当前浏览器里的所有记录，此操作无法恢复" button="清空数据" danger onAction={clearAllData} />
-                  <DataAction title="恢复默认模板" note="恢复系统内置的常吃模板" button="恢复模板" danger onAction={restoreDefaultTemplates} />
+                  <DataAction title="清空常吃模板" note="删除当前所有常吃模板，之后可以重新导入" button="清空模板" danger onAction={clearTemplates} />
                 </div>
               </div>
             </div>
@@ -1264,21 +1315,24 @@ function TemplateSuggestions({
   }
 
   return (
-    <div className="grid gap-3 lg:grid-cols-[0.9fr_2fr] lg:items-center">
-      <div>
-        <p className="text-3xl font-semibold text-ink sm:text-4xl">{round(remainingIntake)} kcal</p>
-        <p className="mt-1 text-sm text-muted">今天剩余可摄入</p>
-        <p className="mt-1 text-sm text-muted">今日还可花 {money(remainingBudget)}</p>
+    <div className="space-y-4">
+      <div className="rounded-[20px] bg-apple/10 p-4">
+        <p className="text-sm font-semibold text-apple">今日剩余</p>
+        <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1">
+          <p className="text-4xl font-semibold leading-none text-ink">{round(remainingIntake)}</p>
+          <p className="pb-1 text-lg font-semibold text-ink">kcal</p>
+        </div>
+        <p className="mt-2 text-sm text-muted">今日还可花 {money(remainingBudget)}</p>
       </div>
-      <div className="space-y-3">
+      <div className="space-y-4">
         {suggestions.length > 0 && (
           <div>
             <p className="mb-2 text-sm font-semibold text-muted">单个选择</p>
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="space-y-2">
               {suggestions.map((item) => (
-                <div key={`${item.id}-suggestion`} className="rounded-2xl bg-[#f2f2f7] p-4">
-                  <p className="font-semibold text-ink">{item.name}</p>
-                  <p className="mt-1 text-sm text-muted">{round(calorieValue(item.calories))} kcal · {money(item.amount)}</p>
+                <div key={`${item.id}-suggestion`} className="flex items-center justify-between gap-3 rounded-2xl bg-[#f2f2f7] px-4 py-3">
+                  <p className="min-w-0 truncate font-semibold text-ink">{item.name}</p>
+                  <p className="shrink-0 text-sm text-muted">{round(calorieValue(item.calories))} kcal · {money(item.amount)}</p>
                 </div>
               ))}
             </div>
@@ -1287,11 +1341,11 @@ function TemplateSuggestions({
         {combos.length > 0 && (
           <div>
             <p className="mb-2 text-sm font-semibold text-muted">两样组合</p>
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="space-y-2">
               {combos.map((item) => (
-                <div key={`${item.names}-combo`} className="rounded-2xl bg-[#f2f2f7] p-4">
-                  <p className="font-semibold text-ink">{item.names}</p>
-                  <p className="mt-1 text-sm text-muted">{round(item.calories)} kcal · {money(item.amount)}</p>
+                <div key={`${item.names}-combo`} className="flex items-center justify-between gap-3 rounded-2xl bg-[#f2f2f7] px-4 py-3">
+                  <p className="min-w-0 truncate font-semibold text-ink">{item.names}</p>
+                  <p className="shrink-0 text-sm text-muted">{round(item.calories)} kcal · {money(item.amount)}</p>
                 </div>
               ))}
             </div>
@@ -1385,29 +1439,20 @@ function RingPanel({
   const progress = percent(ratio);
   const isOver = ratio > 1;
   const displayProgress = Math.min(progress, 100);
-  const background = `conic-gradient(${isOver ? "#ff3b30" : color} ${displayProgress}%, #ffffff ${displayProgress}% 100%)`;
+  const ringColor = isOver ? "#ff3b30" : color;
+  const background = `conic-gradient(${ringColor} ${displayProgress}%, #ffffff ${displayProgress}% 100%)`;
 
   return (
-    <div className="grid gap-4 rounded-[24px] bg-[#f5f5f7] p-4 sm:grid-cols-[9.5rem_1fr] sm:items-center">
-      <div className="relative mx-auto grid aspect-square w-36 place-items-center rounded-full sm:w-auto" style={{ background }}>
-        <div className="grid h-[72%] w-[72%] place-items-center rounded-full bg-[#f5f5f7] text-center">
-          <span className={`text-2xl font-semibold ${isOver ? "text-tomato" : "text-ink"}`}>{progress}%</span>
-          <span className="text-xs text-muted">完成</span>
+    <div className="interactive-card grid gap-4 rounded-[24px] border border-transparent bg-[#f5f5f7] p-4 sm:grid-cols-[8rem_1fr] sm:items-center">
+      <div className="relative mx-auto grid aspect-square w-28 place-items-center rounded-full shadow-[inset_0_0_0_1px_rgba(255,255,255,0.8)] sm:w-32" style={{ background }}>
+        <div className="grid h-[74%] w-[74%] place-items-center rounded-full bg-[#f5f5f7] text-center">
+          <span className={`text-2xl font-semibold ${isOver ? "text-tomato" : "text-ink"}`}>{displayProgress}%</span>
+          <span className="text-[11px] text-muted">完成</span>
         </div>
       </div>
       <div>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-muted">{title}</p>
-            <p className="mt-1 text-2xl font-semibold leading-tight text-ink">{value}</p>
-          </div>
-        </div>
-        <div className="mt-4 h-2 overflow-hidden rounded-full bg-white">
-          <div
-            className="h-full rounded-full transition-all"
-            style={{ width: `${displayProgress}%`, backgroundColor: isOver ? "#ff3b30" : color }}
-          />
-        </div>
+        <p className="text-sm font-medium text-muted">{title}</p>
+        <p className="mt-1 break-words text-2xl font-semibold leading-tight text-ink">{value}</p>
         <p className="mt-3 text-sm leading-5 text-muted">{isOver ? "已经超出目标，后面可以轻一点" : note}</p>
       </div>
     </div>
@@ -1478,29 +1523,20 @@ function DistributionPanel({
         <p className="rounded-2xl bg-white p-4 text-sm text-muted">{emptyText}</p>
       ) : (
         <div className="space-y-3">
-          <div className="flex h-4 overflow-hidden rounded-full bg-white">
-            {visibleItems.map((item) => {
-              const itemRatio = total > 0 ? item.value / total : 0;
-              return (
-                <div
-                  key={`${item.label}-segment`}
-                  className="h-full"
-                  style={{ width: `${percent(itemRatio)}%`, backgroundColor: item.color }}
-                />
-              );
-            })}
-          </div>
           {visibleItems.map((item) => {
             const itemRatio = total > 0 ? item.value / total : 0;
             return (
-              <div key={item.label}>
+              <div key={item.label} className="rounded-2xl bg-white/70 p-3">
                 <div className="mb-1 flex items-center justify-between gap-3 text-sm">
-                  <span className="font-medium text-ink">{item.label}</span>
+                  <span className="flex items-center gap-2 font-medium text-ink">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                    {item.label}
+                  </span>
                   <span className="text-muted">
                     {formatter(item.value)} · {percent(itemRatio)}%
                   </span>
                 </div>
-                <div className="h-2.5 overflow-hidden rounded-full bg-white">
+                <div className="h-2 overflow-hidden rounded-full bg-[#f2f2f7]">
                   <div className="h-full rounded-full" style={{ width: `${percent(itemRatio)}%`, backgroundColor: item.color }} />
                 </div>
               </div>
