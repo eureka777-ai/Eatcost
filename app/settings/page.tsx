@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import AuthGate from "../components/AuthGate";
 
 type Activity = "久坐" | "轻度活动" | "中度活动" | "高度活动";
 type Goal = "维持体重" | "减重" | "增重";
@@ -36,15 +37,20 @@ const activityFactors: Record<Activity, number> = {
   高度活动: 1.725
 };
 
-function loadBody() {
+function loadBody(userId: string) {
   if (typeof window === "undefined") return defaultBody;
-  const raw = window.localStorage.getItem("eatcost.body");
+  const raw = window.localStorage.getItem(`eatcost.${userId}.body`) || window.localStorage.getItem("eatcost.body");
   if (!raw) return defaultBody;
   try {
     return { ...defaultBody, ...JSON.parse(raw) } as BodyData;
   } catch {
     return defaultBody;
   }
+}
+
+function saveBody(userId: string, body: BodyData) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(`eatcost.${userId}.body`, JSON.stringify(body));
 }
 
 function money(value: number) {
@@ -56,18 +62,22 @@ function round(value: number) {
 }
 
 export default function SettingsPage() {
+  return <AuthGate>{(user) => <SettingsApp userId={user.id} />}</AuthGate>;
+}
+
+function SettingsApp({ userId }: { userId: string }) {
   const [ready, setReady] = useState(false);
   const [body, setBody] = useState(defaultBody);
 
   useEffect(() => {
-    setBody(loadBody());
+    setBody(loadBody(userId));
     setReady(true);
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     if (!ready) return;
-    localStorage.setItem("eatcost.body", JSON.stringify(body));
-  }, [body, ready]);
+    saveBody(userId, body);
+  }, [body, ready, userId]);
 
   const metrics = useMemo(() => {
     const bmr =

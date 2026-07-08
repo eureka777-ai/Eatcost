@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import AuthGate from "./components/AuthGate";
 
 type Category = "正餐" | "饮料" | "甜品" | "零食" | "水果" | "其他";
 type Meal = "早餐" | "午餐" | "晚餐" | "加餐";
@@ -135,6 +136,17 @@ function loadState<T>(key: string, fallback: T): T {
   }
 }
 
+function loadUserState<T>(userId: string, key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  const scopedKey = `eatcost.${userId}.${key}`;
+  return loadState(scopedKey, loadState(`eatcost.${key}`, fallback));
+}
+
+function saveUserState<T>(userId: string, key: string, value: T) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(`eatcost.${userId}.${key}`, JSON.stringify(value));
+}
+
 function fileToDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
@@ -184,6 +196,10 @@ function friendlyAiError(error: unknown) {
 }
 
 export default function Home() {
+  return <AuthGate>{(user) => <HomeApp userId={user.id} />}</AuthGate>;
+}
+
+function HomeApp({ userId }: { userId: string }) {
   const [ready, setReady] = useState(false);
   const [body, setBody] = useState(defaultBody);
   const [foods, setFoods] = useState<FoodRecord[]>([]);
@@ -201,20 +217,20 @@ export default function Home() {
   const [aiEstimate, setAiEstimate] = useState<MealEstimate | null>(null);
 
   useEffect(() => {
-    setBody({ ...defaultBody, ...loadState("eatcost.body", defaultBody) });
-    setFoods(loadState("eatcost.foods", []));
-    setExercises(loadState("eatcost.exercises", []));
-    setTemplates(loadState("eatcost.templates", defaultTemplates));
+    setBody({ ...defaultBody, ...loadUserState(userId, "body", defaultBody) });
+    setFoods(loadUserState(userId, "foods", []));
+    setExercises(loadUserState(userId, "exercises", []));
+    setTemplates(loadUserState(userId, "templates", defaultTemplates));
     setReady(true);
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     if (!ready) return;
-    localStorage.setItem("eatcost.body", JSON.stringify(body));
-    localStorage.setItem("eatcost.foods", JSON.stringify(foods));
-    localStorage.setItem("eatcost.exercises", JSON.stringify(exercises));
-    localStorage.setItem("eatcost.templates", JSON.stringify(templates));
-  }, [ready, body, foods, exercises, templates]);
+    saveUserState(userId, "body", body);
+    saveUserState(userId, "foods", foods);
+    saveUserState(userId, "exercises", exercises);
+    saveUserState(userId, "templates", templates);
+  }, [ready, userId, body, foods, exercises, templates]);
 
   const metrics = useMemo(() => {
     const bmr =
