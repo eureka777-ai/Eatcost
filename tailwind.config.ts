@@ -18,7 +18,7 @@ const config: Config = {
         apple: "#007aff"
       },
       boxShadow: {
-        soft: "0 18px 45px rgba(0, 0, 0, 0.08)"
+        soft: "0 10px 28px rgba(0, 0, 0, 0.045)"
       }
     }
   },

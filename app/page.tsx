@@ -279,6 +279,21 @@ export default function Home() {
         </div>
       </header>
 
+      <nav className="sticky top-0 z-10 -mx-3 mb-4 border-y border-white/70 bg-white/75 px-3 py-2 backdrop-blur-xl sm:static sm:mx-0 sm:rounded-full sm:border sm:px-2">
+        <div className="flex gap-2 overflow-x-auto">
+          {[
+            ["#record", "记录"],
+            ["#today", "今日"],
+            ["#insights", "洞察"],
+            ["#month", "月度"]
+          ].map(([href, label]) => (
+            <a key={href} className="shrink-0 rounded-full bg-[#f2f2f7] px-4 py-2 text-sm font-semibold text-ink transition hover:bg-apple hover:text-white" href={href}>
+              {label}
+            </a>
+          ))}
+        </div>
+      </nav>
+
       <section className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
         <Stat title="今日已摄入" value={`${round(stats.todayIntake)} / ${metrics.suggestedIntake} kcal`} note={stats.hasFoodToday ? "已开始记录今日吃喝" : "今日还没有记录吃喝"} />
         <Stat title="今日剩余可吃" value={`${round(stats.remainingIntake)} kcal`} note="先看这个，再决定下一口" strong />
@@ -290,7 +305,8 @@ export default function Home() {
         <TemplateSuggestions remainingIntake={stats.remainingIntake} templates={templates} />
       </Card>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[1.45fr_0.75fr]">
+      <section id="record" className="scroll-mt-20">
+      <div className="mt-4 grid gap-3 sm:gap-4 lg:grid-cols-[1.45fr_0.75fr]">
         <Card title="快速记录吃喝">
           <form className="grid gap-3 sm:grid-cols-2" onSubmit={saveFood}>
             <Text label="名称" value={foodForm.name} onChange={(value) => setFoodForm({ ...foodForm, name: value })} />
@@ -362,7 +378,9 @@ export default function Home() {
           )}
         </Card>
       </div>
+      </section>
 
+      <section id="today" className="scroll-mt-20">
       <Card title="今日时间线" className="mt-4">
         <div className="space-y-5">
           {meals.map((meal) => {
@@ -409,7 +427,9 @@ export default function Home() {
           )}
         </div>
       </Card>
+      </section>
 
+      <section id="insights" className="scroll-mt-20">
       <Card title="可视化洞察" className="mt-4">
         <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
           <RingPanel
@@ -447,7 +467,9 @@ export default function Home() {
           />
         </div>
       </Card>
+      </section>
 
+      <section id="month" className="scroll-mt-20">
       <Card title="本月统计" className="mt-4">
         <div className="mb-4 rounded-[20px] bg-[#f2f2f7] p-4 text-sm leading-6 text-muted">
           <p className="font-semibold text-ink">本月你在吃喝上花了 {money(stats.monthSpending)}</p>
@@ -474,6 +496,7 @@ export default function Home() {
           <Stat title="当前实际缺口" value={stats.hasFoodToday ? `${round(stats.todayDeficit)} kcal` : "未计算"} note={stats.hasFoodToday ? (stats.targetReached ? "已达成目标缺口" : `还差 ${round(body.targetDeficit - stats.todayDeficit)} kcal`) : "先记录吃喝后再计算"} />
         </div>
       </Card>
+      </section>
 
     </main>
   );
@@ -550,8 +573,8 @@ function RingPanel({
   const background = `conic-gradient(${isOver ? "#ff3b30" : color} ${displayProgress}%, #ffffff ${displayProgress}% 100%)`;
 
   return (
-    <div className="grid grid-cols-[8.5rem_1fr] items-center gap-4 rounded-[24px] bg-[#f5f5f7] p-4 sm:grid-cols-[9.5rem_1fr]">
-      <div className="relative grid aspect-square place-items-center rounded-full" style={{ background }}>
+    <div className="grid gap-4 rounded-[24px] bg-[#f5f5f7] p-4 sm:grid-cols-[9.5rem_1fr] sm:items-center">
+      <div className="relative mx-auto grid aspect-square w-36 place-items-center rounded-full sm:w-auto" style={{ background }}>
         <div className="grid h-[72%] w-[72%] place-items-center rounded-full bg-[#f5f5f7] text-center">
           <span className={`text-2xl font-semibold ${isOver ? "text-tomato" : "text-ink"}`}>{progress}%</span>
           <span className="text-xs text-muted">完成</span>
@@ -632,7 +655,7 @@ function DistributionPanel({
 
   return (
     <div className={`rounded-[20px] bg-[#f5f5f7] p-4 ${className}`}>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="font-semibold text-ink">{title}</h3>
         <span className="text-sm text-muted">合计 {formatter(total)}</span>
       </div>
@@ -676,7 +699,7 @@ function DistributionPanel({
 
 function Card({ title, children, className = "" }: { title: string; children: React.ReactNode; className?: string }) {
   return (
-    <section className={`rounded-[22px] border border-white/70 bg-paper p-4 shadow-soft backdrop-blur-xl sm:p-5 ${className}`}>
+    <section className={`rounded-[20px] border border-white/70 bg-paper p-4 shadow-soft backdrop-blur-xl sm:rounded-[22px] sm:p-5 ${className}`}>
       <h2 className="mb-4 text-lg font-semibold text-ink sm:text-xl">{title}</h2>
       {children}
     </section>
@@ -775,12 +798,12 @@ function RecordRow({
   onDelete: () => void;
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-transparent bg-[#f5f5f7] p-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 rounded-2xl border border-transparent bg-[#f5f5f7] p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
       <div>
         <p className="font-semibold text-ink">{title}</p>
         <p className="text-sm text-muted">{meta}</p>
       </div>
-      <div className="flex items-center justify-between gap-3 sm:justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
         <p className="font-semibold text-ink">{value}</p>
         <button className="rounded-full bg-white px-4 py-2 text-sm font-medium text-apple shadow-[0_1px_2px_rgba(0,0,0,0.06)]" onClick={onEdit}>
           编辑
