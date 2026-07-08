@@ -265,11 +265,11 @@ export default function Home() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:py-10">
-      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <main className="mx-auto max-w-6xl px-3 py-5 sm:px-6 lg:py-10">
+      <header className="mb-5 flex flex-col gap-4 sm:mb-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-5xl font-semibold text-ink sm:text-7xl">Eatcost</h1>
-          <p className="mt-3 text-xl font-semibold text-ink sm:text-2xl">今天吃了多少钱？</p>
+          <p className="mt-2 text-lg font-semibold text-ink sm:mt-3 sm:text-2xl">今天吃了多少钱？</p>
         </div>
         <div className="flex flex-col gap-3 sm:items-end">
           <p className="max-w-sm text-sm leading-6 text-muted sm:text-right">打开就记一餐，顺手看看今天还能吃多少、还能花多少钱。</p>
@@ -279,7 +279,7 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
         <Stat title="今日已摄入" value={`${round(stats.todayIntake)} / ${metrics.suggestedIntake} kcal`} note={stats.hasFoodToday ? "已开始记录今日吃喝" : "今日还没有记录吃喝"} />
         <Stat title="今日剩余可吃" value={`${round(stats.remainingIntake)} kcal`} note="先看这个，再决定下一口" strong />
         <Stat title="今日运动消耗" value={`${round(stats.todayExercise)} kcal`} note="额外运动消耗" />
@@ -411,15 +411,15 @@ export default function Home() {
       </Card>
 
       <Card title="可视化洞察" className="mt-4">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <ProgressPanel
+        <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
+          <RingPanel
             title="今日热量进度"
             value={`${round(stats.todayIntake)} / ${metrics.suggestedIntake} kcal`}
             note={`剩余 ${round(stats.remainingIntake)} kcal`}
             ratio={stats.calorieProgressRatio}
             color="#30d158"
           />
-          <ProgressPanel
+          <RingPanel
             title="本月预算进度"
             value={`${money(stats.monthSpending)} / ${money(body.monthlyBudget)}`}
             note={`剩余 ${money(stats.remainingBudget)}`}
@@ -507,7 +507,7 @@ function TemplateSuggestions({
   return (
     <div className="grid gap-3 sm:grid-cols-[1fr_2fr] sm:items-center">
       <div>
-        <p className="text-3xl font-semibold text-ink">{round(remainingIntake)} kcal</p>
+        <p className="text-3xl font-semibold text-ink sm:text-4xl">{round(remainingIntake)} kcal</p>
         <p className="mt-1 text-sm text-muted">今天剩余可摄入</p>
       </div>
       <div className="grid gap-2 sm:grid-cols-3">
@@ -528,6 +528,51 @@ function TimelineGroup({ title, children }: { title: string; children: React.Rea
       <h3 className="pt-3 text-sm font-semibold text-muted">{title}</h3>
       <div className="space-y-2 border-l border-line/70 pl-4">{children}</div>
     </section>
+  );
+}
+
+function RingPanel({
+  title,
+  value,
+  note,
+  ratio,
+  color
+}: {
+  title: string;
+  value: string;
+  note: string;
+  ratio: number;
+  color: string;
+}) {
+  const progress = percent(ratio);
+  const isOver = ratio > 1;
+  const displayProgress = Math.min(progress, 100);
+  const background = `conic-gradient(${isOver ? "#ff3b30" : color} ${displayProgress}%, #ffffff ${displayProgress}% 100%)`;
+
+  return (
+    <div className="grid grid-cols-[8.5rem_1fr] items-center gap-4 rounded-[24px] bg-[#f5f5f7] p-4 sm:grid-cols-[9.5rem_1fr]">
+      <div className="relative grid aspect-square place-items-center rounded-full" style={{ background }}>
+        <div className="grid h-[72%] w-[72%] place-items-center rounded-full bg-[#f5f5f7] text-center">
+          <span className={`text-2xl font-semibold ${isOver ? "text-tomato" : "text-ink"}`}>{progress}%</span>
+          <span className="text-xs text-muted">完成</span>
+        </div>
+      </div>
+      <div>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-muted">{title}</p>
+            <p className="mt-1 text-2xl font-semibold leading-tight text-ink">{value}</p>
+          </div>
+        </div>
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-white">
+          <div
+            className="h-full rounded-full transition-all"
+            style={{ width: `${displayProgress}%`, backgroundColor: isOver ? "#ff3b30" : color }}
+          />
+        </div>
+        <p className="mt-3 text-sm leading-5 text-muted">{isOver ? "已经超出目标，后面可以轻一点" : note}</p>
+      </div>
+    </div>
   );
 }
 
@@ -595,6 +640,18 @@ function DistributionPanel({
         <p className="rounded-2xl bg-white p-4 text-sm text-muted">{emptyText}</p>
       ) : (
         <div className="space-y-3">
+          <div className="flex h-4 overflow-hidden rounded-full bg-white">
+            {visibleItems.map((item) => {
+              const itemRatio = total > 0 ? item.value / total : 0;
+              return (
+                <div
+                  key={`${item.label}-segment`}
+                  className="h-full"
+                  style={{ width: `${percent(itemRatio)}%`, backgroundColor: item.color }}
+                />
+              );
+            })}
+          </div>
           {visibleItems.map((item) => {
             const itemRatio = total > 0 ? item.value / total : 0;
             return (
@@ -619,8 +676,8 @@ function DistributionPanel({
 
 function Card({ title, children, className = "" }: { title: string; children: React.ReactNode; className?: string }) {
   return (
-    <section className={`rounded-[22px] border border-white/70 bg-paper p-5 shadow-soft backdrop-blur-xl ${className}`}>
-      <h2 className="mb-4 text-xl font-semibold text-ink">{title}</h2>
+    <section className={`rounded-[22px] border border-white/70 bg-paper p-4 shadow-soft backdrop-blur-xl sm:p-5 ${className}`}>
+      <h2 className="mb-4 text-lg font-semibold text-ink sm:text-xl">{title}</h2>
       {children}
     </section>
   );
@@ -628,10 +685,10 @@ function Card({ title, children, className = "" }: { title: string; children: Re
 
 function Stat({ title, value, note, strong = false }: { title: string; value: string; note?: string; strong?: boolean }) {
   return (
-    <div className={`rounded-[22px] border border-white/70 bg-paper p-5 shadow-soft backdrop-blur-xl ${strong ? "ring-2 ring-mint/70" : ""}`}>
-      <p className="text-sm font-medium text-muted">{title}</p>
-      <p className="mt-2 text-3xl font-semibold tracking-normal text-ink">{value}</p>
-      {note && <p className="mt-2 text-sm leading-5 text-muted">{note}</p>}
+    <div className={`rounded-[22px] border border-white/70 bg-paper p-4 shadow-soft backdrop-blur-xl sm:p-5 ${strong ? "ring-2 ring-mint/70" : ""}`}>
+      <p className="text-xs font-medium text-muted sm:text-sm">{title}</p>
+      <p className="mt-2 break-words text-2xl font-semibold tracking-normal text-ink sm:text-3xl">{value}</p>
+      {note && <p className="mt-2 text-xs leading-5 text-muted sm:text-sm">{note}</p>}
     </div>
   );
 }
