@@ -216,13 +216,13 @@ export default function Home() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-5 sm:px-6 lg:py-8">
-      <header className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+    <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:py-10">
+      <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-mint">Eatcost</p>
-          <h1 className="text-2xl font-bold text-ink sm:text-4xl">吃喝花费与热量缺口</h1>
+          <p className="text-sm font-semibold text-apple">Eatcost</p>
+          <h1 className="text-3xl font-semibold text-ink sm:text-5xl">吃喝花费与热量缺口</h1>
         </div>
-        <p className="text-sm text-muted">只记录吃喝、热量、运动和减重目标。</p>
+        <p className="max-w-sm text-sm leading-6 text-muted sm:text-right">只记录吃喝、热量、运动和减重目标。</p>
       </header>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -237,21 +237,21 @@ export default function Home() {
         <Stat title="吃喝支出" value={money(stats.todaySpending)} note={`本月 ${money(stats.monthSpending)}`} />
       </section>
 
-      <section className="mt-4 rounded-lg border border-line bg-paper shadow-soft">
+      <section className="mt-4 overflow-hidden rounded-[22px] border border-white/70 bg-paper shadow-soft backdrop-blur-xl">
         <button
-          className="flex w-full items-center justify-between px-4 py-4 text-left"
+          className="flex w-full items-center justify-between gap-4 px-5 py-5 text-left transition hover:bg-white/50"
           onClick={() => setBodyOpen((open) => !open)}
         >
           <span>
-            <span className="block font-semibold text-ink">身体数据和目标设置</span>
-            <span className="text-sm text-muted">
+            <span className="block text-base font-semibold text-ink">身体数据和目标设置</span>
+            <span className="mt-1 block text-sm text-muted">
               BMR {metrics.bmr} kcal · TDEE {metrics.tdee} kcal · 建议摄入 {metrics.suggestedIntake} kcal
             </span>
           </span>
-          <span className="rounded-full bg-wash px-3 py-1 text-sm text-muted">{bodyOpen ? "收起" : "展开"}</span>
+          <span className="shrink-0 rounded-full bg-[#f2f2f7] px-3 py-1 text-sm font-medium text-muted">{bodyOpen ? "收起" : "展开"}</span>
         </button>
         {bodyOpen && (
-          <div className="grid gap-3 border-t border-line p-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 border-t border-line/70 p-5 sm:grid-cols-2 lg:grid-cols-4">
             <Select label="性别" value={body.gender} options={["女", "男"]} onChange={(value) => setBody({ ...body, gender: value as BodyData["gender"] })} />
             <Field label="年龄" value={body.age} onChange={(value) => setBody({ ...body, age: Number(value) })} />
             <Field label="身高 cm" value={body.height} onChange={(value) => setBody({ ...body, height: Number(value) })} />
@@ -277,9 +277,9 @@ export default function Home() {
             <Text label="日期" type="date" value={foodForm.date} onChange={(value) => setFoodForm({ ...foodForm, date: value })} />
             <label className="sm:col-span-2">
               <span className="mb-1 block text-sm text-muted">备注</span>
-              <textarea className="min-h-20 w-full rounded-lg border border-line bg-white px-3 py-2 outline-mint" value={foodForm.note} onChange={(event) => setFoodForm({ ...foodForm, note: event.target.value })} />
+              <textarea className="min-h-20 w-full rounded-2xl border border-transparent bg-[#f2f2f7] px-4 py-3 text-ink outline-none transition focus:border-apple/40 focus:bg-white focus:ring-4 focus:ring-apple/10" value={foodForm.note} onChange={(event) => setFoodForm({ ...foodForm, note: event.target.value })} />
             </label>
-            <button className="rounded-lg bg-ink px-4 py-3 font-semibold text-white sm:col-span-2">
+            <button className="rounded-2xl bg-apple px-4 py-3 font-semibold text-white shadow-[0_10px_24px_rgba(0,122,255,0.24)] transition hover:bg-[#006fe6] sm:col-span-2">
               {editingFoodId ? "保存吃喝记录" : "新增吃喝记录"}
             </button>
           </form>
@@ -292,7 +292,7 @@ export default function Home() {
             <Field label="消耗热量 kcal" value={exerciseForm.calories} onChange={(value) => setExerciseForm({ ...exerciseForm, calories: Number(value) })} />
             <Text label="日期" type="date" value={exerciseForm.date} onChange={(value) => setExerciseForm({ ...exerciseForm, date: value })} />
             <Text label="备注" value={exerciseForm.note} onChange={(value) => setExerciseForm({ ...exerciseForm, note: value })} />
-            <button className="rounded-lg bg-mint px-4 py-3 font-semibold text-white">
+            <button className="rounded-2xl bg-ink px-4 py-3 font-semibold text-white shadow-[0_10px_24px_rgba(0,0,0,0.16)] transition hover:bg-black">
               {editingExerciseId ? "保存运动记录" : "新增运动记录"}
             </button>
           </form>
@@ -339,7 +339,7 @@ export default function Home() {
             {templates.map((item) => (
               <button
                 key={`${item.name}-${item.calories}`}
-                className="flex items-center justify-between rounded-lg border border-line bg-white px-3 py-3 text-left hover:border-mint"
+              className="flex items-center justify-between rounded-2xl border border-transparent bg-[#f5f5f7] px-4 py-3 text-left transition hover:bg-white hover:shadow-[0_8px_22px_rgba(0,0,0,0.06)]"
                 onClick={() => setFoodForm({ ...foodForm, ...item })}
               >
                 <span>
@@ -353,7 +353,7 @@ export default function Home() {
                 </span>
               </button>
             ))}
-            <button className="rounded-lg border border-dashed border-line px-3 py-3 text-sm text-muted" onClick={() => setTemplates(defaultTemplates)}>
+            <button className="rounded-2xl border border-dashed border-line px-3 py-3 text-sm font-medium text-muted transition hover:border-apple hover:text-apple" onClick={() => setTemplates(defaultTemplates)}>
               恢复默认模板
             </button>
           </div>
@@ -383,8 +383,8 @@ function stripId<T extends { id: string }>(item: T): Omit<T, "id"> {
 
 function Card({ title, children, className = "" }: { title: string; children: React.ReactNode; className?: string }) {
   return (
-    <section className={`rounded-lg border border-line bg-paper p-4 shadow-soft ${className}`}>
-      <h2 className="mb-3 text-lg font-bold text-ink">{title}</h2>
+    <section className={`rounded-[22px] border border-white/70 bg-paper p-5 shadow-soft backdrop-blur-xl ${className}`}>
+      <h2 className="mb-4 text-xl font-semibold text-ink">{title}</h2>
       {children}
     </section>
   );
@@ -392,10 +392,10 @@ function Card({ title, children, className = "" }: { title: string; children: Re
 
 function Stat({ title, value, note, strong = false }: { title: string; value: string; note?: string; strong?: boolean }) {
   return (
-    <div className={`rounded-lg border border-line bg-paper p-4 shadow-soft ${strong ? "ring-2 ring-mint" : ""}`}>
-      <p className="text-sm text-muted">{title}</p>
-      <p className="mt-1 text-2xl font-bold text-ink">{value}</p>
-      {note && <p className="mt-1 text-sm text-muted">{note}</p>}
+    <div className={`rounded-[22px] border border-white/70 bg-paper p-5 shadow-soft backdrop-blur-xl ${strong ? "ring-2 ring-mint/70" : ""}`}>
+      <p className="text-sm font-medium text-muted">{title}</p>
+      <p className="mt-2 text-3xl font-semibold tracking-normal text-ink">{value}</p>
+      {note && <p className="mt-2 text-sm leading-5 text-muted">{note}</p>}
     </div>
   );
 }
@@ -431,7 +431,7 @@ function Text({
     <label>
       <span className="mb-1 block text-sm text-muted">{label}</span>
       <input
-        className="h-11 w-full rounded-lg border border-line bg-white px-3 outline-mint"
+        className="h-12 w-full rounded-2xl border border-transparent bg-[#f2f2f7] px-4 text-ink outline-none transition placeholder:text-[#8e8e93] focus:border-apple/40 focus:bg-white focus:ring-4 focus:ring-apple/10"
         type={type}
         step={step}
         value={value}
@@ -456,7 +456,7 @@ function Select({
     <label>
       <span className="mb-1 block text-sm text-muted">{label}</span>
       <select
-        className="h-11 w-full rounded-lg border border-line bg-white px-3 outline-mint"
+        className="h-12 w-full rounded-2xl border border-transparent bg-[#f2f2f7] px-4 text-ink outline-none transition focus:border-apple/40 focus:bg-white focus:ring-4 focus:ring-apple/10"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
@@ -482,17 +482,17 @@ function RecordRow({
   onDelete: () => void;
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-line bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 rounded-2xl border border-transparent bg-[#f5f5f7] p-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <p className="font-semibold text-ink">{title}</p>
         <p className="text-sm text-muted">{meta}</p>
       </div>
       <div className="flex items-center justify-between gap-3 sm:justify-end">
         <p className="font-semibold text-ink">{value}</p>
-        <button className="rounded-lg bg-wash px-3 py-2 text-sm text-ink" onClick={onEdit}>
+        <button className="rounded-full bg-white px-4 py-2 text-sm font-medium text-apple shadow-[0_1px_2px_rgba(0,0,0,0.06)]" onClick={onEdit}>
           编辑
         </button>
-        <button className="rounded-lg bg-red-50 px-3 py-2 text-sm text-tomato" onClick={onDelete}>
+        <button className="rounded-full bg-[#fff1f0] px-4 py-2 text-sm font-medium text-tomato" onClick={onDelete}>
           删除
         </button>
       </div>
