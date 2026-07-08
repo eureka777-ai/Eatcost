@@ -8,6 +8,7 @@ type Source = "外卖" | "堂食" | "自己做饭" | "便利店" | "咖啡店" |
 type Payment = "微信" | "支付宝" | "银行卡" | "现金" | "其他";
 type Activity = "久坐" | "轻度活动" | "中度活动" | "高度活动";
 type Goal = "维持体重" | "减重" | "增重";
+type Section = "record" | "today" | "insights" | "month";
 
 type BodyData = {
   gender: "女" | "男";
@@ -44,6 +45,13 @@ type ExerciseRecord = {
 };
 
 type FoodTemplate = Pick<FoodRecord, "name" | "amount" | "calories" | "category">;
+type MealEstimate = {
+  name: string;
+  calories: number;
+  category: Category;
+  confidence: "低" | "中" | "高";
+  note: string;
+};
 
 const today = () => new Date().toISOString().slice(0, 10);
 const uid = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -127,6 +135,15 @@ function loadState<T>(key: string, fallback: T): T {
   }
 }
 
+function fileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("图片读取失败"));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function Home() {
   const [ready, setReady] = useState(false);
   const [body, setBody] = useState(defaultBody);
@@ -139,6 +156,10 @@ export default function Home() {
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
   const [foodMoreOpen, setFoodMoreOpen] = useState(false);
   const [exerciseOpen, setExerciseOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<Section>("record");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
+  const [aiEstimate, setAiEstimate] = useState<MealEstimate | null>(null);
 
   useEffect(() => {
     setBody({ ...defaultBody, ...loadState("eatcost.body", defaultBody) });
@@ -264,6 +285,34 @@ export default function Home() {
     setEditingExerciseId(null);
   }
 
+  async function analyzeMealPhoto(file: File) {
+    setAiLoading(true);
+    setAiError("");
+    setAiEstimate(null);
+    try {
+      const image = await fileToDataUrl(file);
+      const response = await fetch("/api/analyze-meal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "识别失败");
+      const estimate = data as MealEstimate;
+      setAiEstimate(estimate);
+      setFoodForm((current) => ({
+        ...current,
+        name: estimate.name || current.name,
+        calories: Number(estimate.calories || current.calories),
+        category: estimate.category || current.category
+      }));
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : "识别失败，请稍后再试");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
   return (
     <main className="mx-auto max-w-6xl px-3 py-5 sm:px-6 lg:py-10">
       <header className="mb-5 flex flex-col gap-4 sm:mb-6 sm:flex-row sm:items-end sm:justify-between">
@@ -279,17 +328,23 @@ export default function Home() {
         </div>
       </header>
 
-      <nav className="sticky top-0 z-10 -mx-3 mb-4 border-y border-white/70 bg-white/75 px-3 py-2 backdrop-blur-xl sm:static sm:mx-0 sm:rounded-full sm:border sm:px-2">
+      <nav className="sticky top-0 z-10 -mx-3 mb-4 border-y border-white/70 bg-white/80 px-3 py-2 backdrop-blur-xl sm:static sm:mx-0 sm:rounded-full sm:border sm:px-2">
         <div className="flex gap-2 overflow-x-auto">
           {[
-            ["#record", "记录"],
-            ["#today", "今日"],
-            ["#insights", "洞察"],
-            ["#month", "月度"]
-          ].map(([href, label]) => (
-            <a key={href} className="shrink-0 rounded-full bg-[#f2f2f7] px-4 py-2 text-sm font-semibold text-ink transition hover:bg-apple hover:text-white" href={href}>
+            ["record", "记录"],
+            ["today", "今日"],
+            ["insights", "洞察"],
+            ["month", "月度"]
+          ].map(([section, label]) => (
+            <button
+              key={section}
+              className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition ${
+                activeSection === section ? "bg-apple text-white" : "bg-[#f2f2f7] text-ink hover:bg-white"
+              }`}
+              onClick={() => setActiveSection(section as Section)}
+            >
               {label}
-            </a>
+            </button>
           ))}
         </div>
       </nav>
@@ -301,13 +356,44 @@ export default function Home() {
         <Stat title="今日吃喝支出" value={`${money(stats.todaySpending)} / ${money(stats.budgetPerDay)}`} note={`本月剩余 ${money(stats.remainingBudget)}`} />
       </section>
 
-      <Card title="今天还能吃什么" className="mt-4">
-        <TemplateSuggestions remainingIntake={stats.remainingIntake} templates={templates} />
-      </Card>
+      {activeSection === "record" && (
+        <section>
+          <Card title="今天还能吃什么" className="mt-4">
+            <TemplateSuggestions remainingIntake={stats.remainingIntake} templates={templates} />
+          </Card>
 
-      <section id="record" className="scroll-mt-20">
       <div className="mt-4 grid gap-3 sm:gap-4 lg:grid-cols-[1.45fr_0.75fr]">
         <Card title="快速记录吃喝">
+          <div className="mb-4 rounded-[20px] bg-[#f5f5f7] p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-semibold text-ink">拍照估算热量</p>
+                <p className="mt-1 text-sm leading-5 text-muted">上传这餐照片，AI 会估算名称和热量；价格仍需要你确认。</p>
+              </div>
+              <label className="shrink-0 cursor-pointer rounded-full bg-white px-4 py-2 text-center text-sm font-semibold text-apple shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
+                {aiLoading ? "识别中..." : "拍照 / 上传"}
+                <input
+                  className="hidden"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  disabled={aiLoading}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) analyzeMealPhoto(file);
+                    event.currentTarget.value = "";
+                  }}
+                />
+              </label>
+            </div>
+            {aiEstimate && (
+              <div className="mt-3 rounded-2xl bg-white p-3 text-sm text-muted">
+                <span className="font-semibold text-ink">{aiEstimate.name}</span> · 约 {aiEstimate.calories} kcal · 可信度 {aiEstimate.confidence}
+                {aiEstimate.note && <p className="mt-1">{aiEstimate.note}</p>}
+              </div>
+            )}
+            {aiError && <p className="mt-3 rounded-2xl bg-[#fff1f0] p-3 text-sm text-tomato">{aiError}</p>}
+          </div>
           <form className="grid gap-3 sm:grid-cols-2" onSubmit={saveFood}>
             <Text label="名称" value={foodForm.name} onChange={(value) => setFoodForm({ ...foodForm, name: value })} />
             <Field label="金额" value={foodForm.amount} step="0.01" onChange={(value) => setFoodForm({ ...foodForm, amount: Number(value) })} />
@@ -378,9 +464,11 @@ export default function Home() {
           )}
         </Card>
       </div>
-      </section>
+        </section>
+      )}
 
-      <section id="today" className="scroll-mt-20">
+      {activeSection === "today" && (
+      <section>
       <Card title="今日时间线" className="mt-4">
         <div className="space-y-5">
           {meals.map((meal) => {
@@ -428,18 +516,20 @@ export default function Home() {
         </div>
       </Card>
       </section>
+      )}
 
-      <section id="insights" className="scroll-mt-20">
+      {activeSection === "insights" && (
+      <section>
       <Card title="可视化洞察" className="mt-4">
         <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
-          <RingPanel
+          <ProgressPanel
             title="今日热量进度"
             value={`${round(stats.todayIntake)} / ${metrics.suggestedIntake} kcal`}
             note={`剩余 ${round(stats.remainingIntake)} kcal`}
             ratio={stats.calorieProgressRatio}
             color="#30d158"
           />
-          <RingPanel
+          <ProgressPanel
             title="本月预算进度"
             value={`${money(stats.monthSpending)} / ${money(body.monthlyBudget)}`}
             note={`剩余 ${money(stats.remainingBudget)}`}
@@ -468,8 +558,10 @@ export default function Home() {
         </div>
       </Card>
       </section>
+      )}
 
-      <section id="month" className="scroll-mt-20">
+      {activeSection === "month" && (
+      <section>
       <Card title="本月统计" className="mt-4">
         <div className="mb-4 rounded-[20px] bg-[#f2f2f7] p-4 text-sm leading-6 text-muted">
           <p className="font-semibold text-ink">本月你在吃喝上花了 {money(stats.monthSpending)}</p>
@@ -497,6 +589,7 @@ export default function Home() {
         </div>
       </Card>
       </section>
+      )}
 
     </main>
   );
