@@ -273,7 +273,7 @@ export default function Home() {
         </div>
         <div className="flex flex-col gap-3 sm:items-end">
           <p className="max-w-sm text-sm leading-6 text-muted sm:text-right">打开就记一餐，顺手看看今天还能吃多少、还能花多少钱。</p>
-          <a className="w-fit rounded-full bg-[#f2f2f7] px-4 py-2 text-sm font-medium text-apple transition hover:bg-white" href="/settings">
+          <a className="w-fit rounded-full bg-[#f2f2f7] px-4 py-2 text-sm font-medium text-apple transition hover:bg-white" href="/settings/">
             设置身体数据和预算
           </a>
         </div>
