@@ -102,6 +102,7 @@ const categories: Category[] = ["正餐", "饮料", "甜品", "零食", "水果"
 const meals: Meal[] = ["早餐", "午餐", "晚餐", "加餐"];
 const sources: Source[] = ["外卖", "堂食", "自己做饭", "便利店", "咖啡店", "其他"];
 const payments: Payment[] = ["微信", "支付宝", "银行卡", "现金", "其他"];
+const chartColors = ["#007aff", "#30d158", "#ff9500", "#af52de", "#ff3b30", "#8e8e93"];
 
 function money(value: number) {
   return `¥${value.toFixed(2)}`;
@@ -109,6 +110,10 @@ function money(value: number) {
 
 function round(value: number) {
   return Math.round(Number.isFinite(value) ? value : 0);
+}
+
+function percent(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value * 100)));
 }
 
 function loadState<T>(key: string, fallback: T): T {
@@ -185,6 +190,21 @@ export default function Home() {
       "amount"
     );
     const deliverySpending = sum(monthFoods.filter((item) => item.source === "外卖"), "amount");
+    const categorySpending = categories.map((category, index) => ({
+      label: category,
+      value: sum(monthFoods.filter((item) => item.category === category), "amount"),
+      color: chartColors[index]
+    }));
+    const sourceSpending = sources.map((source, index) => ({
+      label: source,
+      value: sum(monthFoods.filter((item) => item.source === source), "amount"),
+      color: chartColors[index]
+    }));
+    const mealCalories = meals.map((meal, index) => ({
+      label: meal,
+      value: sum(todayFoods.filter((item) => item.meal === meal), "calories"),
+      color: chartColors[index]
+    }));
 
     return {
       todayFoods,
@@ -208,9 +228,13 @@ export default function Home() {
       deliveryRatio: monthSpending > 0 ? deliverySpending / monthSpending : 0,
       budgetPerDay,
       budgetSpentRatio,
+      calorieProgressRatio: metrics.suggestedIntake > 0 ? todayIntake / metrics.suggestedIntake : 0,
       projectedMonthSpending,
       remainingBudget,
-      todayBudgetLeft
+      todayBudgetLeft,
+      categorySpending,
+      sourceSpending,
+      mealCalories
     };
   }, [body.monthlyBudget, body.targetDeficit, exercises, foods, metrics.suggestedIntake, metrics.tdee]);
 
@@ -386,6 +410,44 @@ export default function Home() {
         </div>
       </Card>
 
+      <Card title="可视化洞察" className="mt-4">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <ProgressPanel
+            title="今日热量进度"
+            value={`${round(stats.todayIntake)} / ${metrics.suggestedIntake} kcal`}
+            note={`剩余 ${round(stats.remainingIntake)} kcal`}
+            ratio={stats.calorieProgressRatio}
+            color="#30d158"
+          />
+          <ProgressPanel
+            title="本月预算进度"
+            value={`${money(stats.monthSpending)} / ${money(body.monthlyBudget)}`}
+            note={`剩余 ${money(stats.remainingBudget)}`}
+            ratio={stats.budgetSpentRatio}
+            color="#007aff"
+          />
+          <DistributionPanel
+            title="本月支出构成"
+            emptyText="本月还没有吃喝支出"
+            items={stats.categorySpending}
+            formatter={money}
+          />
+          <DistributionPanel
+            title="今日热量构成"
+            emptyText="今天还没有记录热量"
+            items={stats.mealCalories}
+            formatter={(value) => `${round(value)} kcal`}
+          />
+          <DistributionPanel
+            title="本月来源构成"
+            emptyText="本月还没有来源记录"
+            items={stats.sourceSpending}
+            formatter={money}
+            className="lg:col-span-2"
+          />
+        </div>
+      </Card>
+
       <Card title="本月统计" className="mt-4">
         <div className="mb-4 rounded-[20px] bg-[#f2f2f7] p-4 text-sm leading-6 text-muted">
           <p className="font-semibold text-ink">本月你在吃喝上花了 {money(stats.monthSpending)}</p>
@@ -466,6 +528,92 @@ function TimelineGroup({ title, children }: { title: string; children: React.Rea
       <h3 className="pt-3 text-sm font-semibold text-muted">{title}</h3>
       <div className="space-y-2 border-l border-line/70 pl-4">{children}</div>
     </section>
+  );
+}
+
+function ProgressPanel({
+  title,
+  value,
+  note,
+  ratio,
+  color
+}: {
+  title: string;
+  value: string;
+  note: string;
+  ratio: number;
+  color: string;
+}) {
+  const width = percent(ratio);
+  const isOver = ratio > 1;
+
+  return (
+    <div className="rounded-[20px] bg-[#f5f5f7] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-muted">{title}</p>
+          <p className="mt-1 text-2xl font-semibold text-ink">{value}</p>
+        </div>
+        <span className={`rounded-full px-3 py-1 text-sm font-semibold ${isOver ? "bg-[#fff1f0] text-tomato" : "bg-white text-ink"}`}>
+          {width}%
+        </span>
+      </div>
+      <div className="mt-4 h-3 overflow-hidden rounded-full bg-white">
+        <div
+          className="h-full rounded-full transition-all"
+          style={{ width: `${width}%`, backgroundColor: isOver ? "#ff3b30" : color }}
+        />
+      </div>
+      <p className="mt-3 text-sm text-muted">{isOver ? "已经超出目标，后面可以轻一点" : note}</p>
+    </div>
+  );
+}
+
+function DistributionPanel({
+  title,
+  items,
+  formatter,
+  emptyText,
+  className = ""
+}: {
+  title: string;
+  items: { label: string; value: number; color: string }[];
+  formatter: (value: number) => string;
+  emptyText: string;
+  className?: string;
+}) {
+  const total = items.reduce((sumValue, item) => sumValue + item.value, 0);
+  const visibleItems = items.filter((item) => item.value > 0);
+
+  return (
+    <div className={`rounded-[20px] bg-[#f5f5f7] p-4 ${className}`}>
+      <div className="mb-4 flex items-center justify-between">
+        <h3 className="font-semibold text-ink">{title}</h3>
+        <span className="text-sm text-muted">合计 {formatter(total)}</span>
+      </div>
+      {visibleItems.length === 0 ? (
+        <p className="rounded-2xl bg-white p-4 text-sm text-muted">{emptyText}</p>
+      ) : (
+        <div className="space-y-3">
+          {visibleItems.map((item) => {
+            const itemRatio = total > 0 ? item.value / total : 0;
+            return (
+              <div key={item.label}>
+                <div className="mb-1 flex items-center justify-between gap-3 text-sm">
+                  <span className="font-medium text-ink">{item.label}</span>
+                  <span className="text-muted">
+                    {formatter(item.value)} · {percent(itemRatio)}%
+                  </span>
+                </div>
+                <div className="h-2.5 overflow-hidden rounded-full bg-white">
+                  <div className="h-full rounded-full" style={{ width: `${percent(itemRatio)}%`, backgroundColor: item.color }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
