@@ -700,9 +700,6 @@ function HomeApp({ userId }: { userId: string }) {
         </div>
         <div className="flex flex-col gap-3 sm:items-end">
           <p className="max-w-sm text-sm leading-6 text-muted sm:text-right">打开就记一餐，顺手看看今天还能吃多少、还能花多少钱。</p>
-          <button className="btn-secondary w-fit rounded-full px-4 py-2 text-sm font-medium text-apple" type="button" onClick={() => scrollToSection("settings")}>
-            设置身体数据和预算
-          </button>
         </div>
       </header>
 
@@ -729,8 +726,6 @@ function HomeApp({ userId }: { userId: string }) {
       </nav>
 
       <section id="section-today" className="scroll-mt-4">
-        <DateSwitcher selectedDate={selectedDate} onChange={setSelectedDate} />
-
         {foods.length + exercises.length === 0 && (
           <EmptyState
             title="想先看看完整效果？"
@@ -741,7 +736,12 @@ function HomeApp({ userId }: { userId: string }) {
           />
         )}
 
-        <SectionHeader eyebrow="Today" title="今日状态" note="打开先看这四个数：还能吃多少、还能花多少。" />
+        <SectionHeader
+          eyebrow="Today"
+          title="今日状态"
+          note="打开先看这四个数：还能吃多少、还能花多少。"
+          action={<DateSwitcher selectedDate={selectedDate} onChange={setSelectedDate} />}
+        />
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatusCard title="今日剩余可吃" value={`${round(stats.remainingIntake)} kcal`} note="先看这个，再决定下一口" strong />
           <StatusCard title="今日还可花" value={money(stats.todayBudgetLeft)} note={`今日建议 ${money(stats.budgetPerDay)}`} />
@@ -1175,13 +1175,13 @@ function DateSwitcher({ selectedDate, onChange }: { selectedDate: string; onChan
   ];
 
   return (
-    <section className="mb-4 flex flex-col gap-2 rounded-[22px] border border-white/70 bg-paper p-2 shadow-soft backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex gap-2 overflow-x-auto">
+    <div className="flex max-w-full flex-col gap-2 rounded-[20px] bg-white/70 p-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.04)] sm:flex-row sm:items-center">
+      <div className="flex gap-1 overflow-x-auto">
         {quickDates.map((item) => (
           <button
             key={item.label}
-            className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition ${
-              selectedDate === item.value ? "bg-apple text-white" : "bg-[#f2f2f7] text-ink hover:bg-white"
+            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition sm:text-sm ${
+              selectedDate === item.value ? "bg-apple text-white shadow-[0_8px_18px_rgba(0,122,255,0.18)]" : "text-muted hover:bg-[#f2f2f7] hover:text-ink"
             }`}
             onClick={() => onChange(item.value)}
             type="button"
@@ -1190,11 +1190,11 @@ function DateSwitcher({ selectedDate, onChange }: { selectedDate: string; onChan
           </button>
         ))}
       </div>
-      <label className="flex items-center gap-2 rounded-full bg-[#f2f2f7] px-4 py-2 text-sm text-muted">
-        指定日期
-        <input className="bg-transparent font-semibold text-ink outline-none" type="date" value={selectedDate} onChange={(event) => onChange(event.target.value)} />
+      <label className="flex shrink-0 items-center gap-2 rounded-full bg-[#f2f2f7] px-3 py-1.5 text-xs text-muted sm:text-sm">
+        <span className="hidden sm:inline">日期</span>
+        <input className="w-[8.2rem] bg-transparent font-semibold text-ink outline-none" type="date" value={selectedDate} onChange={(event) => onChange(event.target.value)} />
       </label>
-    </section>
+    </div>
   );
 }
 
@@ -1202,20 +1202,25 @@ function SectionHeader({
   eyebrow,
   title,
   note,
+  action,
   className = ""
 }: {
   eyebrow: string;
   title: string;
   note: string;
+  action?: React.ReactNode;
   className?: string;
 }) {
   return (
-    <div className={`mb-2 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between ${className}`}>
+    <div className={`mb-2 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between ${className}`}>
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-apple">{eyebrow}</p>
         <h2 className="mt-1 text-2xl font-semibold text-ink sm:text-3xl">{title}</h2>
       </div>
-      <p className="max-w-md text-sm leading-6 text-muted sm:text-right">{note}</p>
+      <div className="flex flex-col gap-2 sm:items-end">
+        <p className="max-w-md text-sm leading-6 text-muted sm:text-right">{note}</p>
+        {action}
+      </div>
     </div>
   );
 }
