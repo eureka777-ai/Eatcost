@@ -10,6 +10,7 @@ type Payment = "微信" | "支付宝" | "银行卡" | "现金" | "其他";
 type Activity = "久坐" | "轻度活动" | "中度活动" | "高度活动";
 type Goal = "维持体重" | "减重" | "增重";
 type Section = "record" | "today" | "insights" | "month";
+type CalorieConfidence = "准确" | "估算" | "待补充";
 
 type BodyData = {
   gender: "女" | "男";
@@ -27,7 +28,8 @@ type FoodRecord = {
   id: string;
   name: string;
   amount: number;
-  calories: number;
+  calories: number | "";
+  calorieConfidence: CalorieConfidence;
   category: Category;
   meal: Meal;
   source: Source;
@@ -45,7 +47,9 @@ type ExerciseRecord = {
   note: string;
 };
 
-type FoodTemplate = Pick<FoodRecord, "name" | "amount" | "calories" | "category">;
+type FoodTemplate = Pick<FoodRecord, "name" | "amount" | "calories" | "calorieConfidence" | "category"> & {
+  id: string;
+};
 type MealEstimate = {
   name: string;
   calories: number;
@@ -72,7 +76,8 @@ const defaultBody: BodyData = {
 const defaultFood: Omit<FoodRecord, "id"> = {
   name: "",
   amount: 0,
-  calories: 0,
+  calories: "",
+  calorieConfidence: "待补充",
   category: "正餐",
   meal: "午餐",
   source: "外卖",
@@ -90,14 +95,14 @@ const defaultExercise: Omit<ExerciseRecord, "id"> = {
 };
 
 const defaultTemplates: FoodTemplate[] = [
-  { name: "米饭一份", amount: 1, calories: 180, category: "正餐" },
-  { name: "豆浆 200ml", amount: 3, calories: 90, category: "饮料" },
-  { name: "奶茶", amount: 18, calories: 350, category: "饮料" },
-  { name: "布丁", amount: 6, calories: 120, category: "甜品" },
-  { name: "牛肉粉", amount: 18, calories: 650, category: "正餐" },
-  { name: "鸡胸肉饭", amount: 25, calories: 500, category: "正餐" },
-  { name: "美式咖啡", amount: 15, calories: 10, category: "饮料" },
-  { name: "水果一份", amount: 8, calories: 100, category: "水果" }
+  { id: "template-rice", name: "米饭一份", amount: 1, calories: 180, calorieConfidence: "估算", category: "正餐" },
+  { id: "template-soy", name: "豆浆 200ml", amount: 3, calories: 90, calorieConfidence: "估算", category: "饮料" },
+  { id: "template-milk-tea", name: "奶茶", amount: 18, calories: 350, calorieConfidence: "估算", category: "饮料" },
+  { id: "template-pudding", name: "布丁", amount: 6, calories: 120, calorieConfidence: "估算", category: "甜品" },
+  { id: "template-noodle", name: "牛肉粉", amount: 18, calories: 650, calorieConfidence: "估算", category: "正餐" },
+  { id: "template-chicken", name: "鸡胸肉饭", amount: 25, calories: 500, calorieConfidence: "估算", category: "正餐" },
+  { id: "template-coffee", name: "美式咖啡", amount: 15, calories: 10, calorieConfidence: "估算", category: "饮料" },
+  { id: "template-fruit", name: "水果一份", amount: 8, calories: 100, calorieConfidence: "估算", category: "水果" }
 ];
 
 const activityFactors: Record<Activity, number> = {
@@ -111,7 +116,30 @@ const categories: Category[] = ["正餐", "饮料", "甜品", "零食", "水果"
 const meals: Meal[] = ["早餐", "午餐", "晚餐", "加餐"];
 const sources: Source[] = ["外卖", "堂食", "自己做饭", "便利店", "咖啡店", "其他"];
 const payments: Payment[] = ["微信", "支付宝", "银行卡", "现金", "其他"];
+const calorieConfidences: CalorieConfidence[] = ["准确", "估算", "待补充"];
 const chartColors = ["#007aff", "#30d158", "#ff9500", "#af52de", "#ff3b30", "#8e8e93"];
+
+function dateByOffset(offset: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + offset);
+  return date.toISOString().slice(0, 10);
+}
+
+function daysInSelectedMonth(dateText: string) {
+  const [year, month] = dateText.split("-").map(Number);
+  return new Date(year, month, 0).getDate();
+}
+
+function dayOfMonth(dateText: string) {
+  return Number(dateText.slice(8, 10));
+}
+
+function selectedDateLabel(dateText: string) {
+  if (dateText === dateByOffset(0)) return "今天";
+  if (dateText === dateByOffset(-1)) return "昨天";
+  if (dateText === dateByOffset(-2)) return "前天";
+  return dateText;
+}
 
 function money(value: number) {
   return `¥${value.toFixed(2)}`;
@@ -123,6 +151,30 @@ function round(value: number) {
 
 function percent(value: number) {
   return Math.max(0, Math.min(100, Math.round(value * 100)));
+}
+
+function calorieValue(value: number | "") {
+  return Number(value || 0);
+}
+
+function calorieText(item: Pick<FoodRecord, "calories" | "calorieConfidence">) {
+  if (item.calories === "" || item.calorieConfidence === "待补充") return "热量待补充";
+  return `${round(item.calories)} kcal · ${item.calorieConfidence}`;
+}
+
+function normalizeFoods(items: FoodRecord[]) {
+  return items.map((item) => ({
+    ...item,
+    calorieConfidence: item.calorieConfidence ?? (item.calories === "" ? "待补充" : "估算")
+  }));
+}
+
+function normalizeTemplates(items: FoodTemplate[]) {
+  return items.map((item, index) => ({
+    ...item,
+    id: item.id ?? `template-${index}-${item.name}`,
+    calorieConfidence: item.calorieConfidence ?? (item.calories === "" ? "待补充" : "估算")
+  }));
 }
 
 function loadState<T>(key: string, fallback: T): T {
@@ -212,15 +264,17 @@ function HomeApp({ userId }: { userId: string }) {
   const [foodMoreOpen, setFoodMoreOpen] = useState(false);
   const [exerciseOpen, setExerciseOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<Section>("record");
+  const [selectedDate, setSelectedDate] = useState(today());
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
   const [aiEstimate, setAiEstimate] = useState<MealEstimate | null>(null);
 
   useEffect(() => {
     setBody({ ...defaultBody, ...loadUserState(userId, "body", defaultBody) });
-    setFoods(loadUserState(userId, "foods", []));
+    setFoods(normalizeFoods(loadUserState(userId, "foods", [])));
     setExercises(loadUserState(userId, "exercises", []));
-    setTemplates(loadUserState(userId, "templates", defaultTemplates));
+    setTemplates(normalizeTemplates(loadUserState(userId, "templates", defaultTemplates)));
     setReady(true);
   }, [userId]);
 
@@ -231,6 +285,12 @@ function HomeApp({ userId }: { userId: string }) {
     saveUserState(userId, "exercises", exercises);
     saveUserState(userId, "templates", templates);
   }, [ready, userId, body, foods, exercises, templates]);
+
+  useEffect(() => {
+    if (editingFoodId || editingExerciseId) return;
+    setFoodForm((current) => ({ ...current, date: selectedDate }));
+    setExerciseForm((current) => ({ ...current, date: selectedDate }));
+  }, [editingExerciseId, editingFoodId, selectedDate]);
 
   const metrics = useMemo(() => {
     const bmr =
@@ -244,7 +304,7 @@ function HomeApp({ userId }: { userId: string }) {
   }, [body]);
 
   const stats = useMemo(() => {
-    const currentDate = today();
+    const currentDate = selectedDate;
     const month = currentDate.slice(0, 7);
     const todayFoods = foods.filter((item) => item.date === currentDate);
     const monthFoods = foods.filter((item) => item.date.startsWith(month));
@@ -253,13 +313,14 @@ function HomeApp({ userId }: { userId: string }) {
     const todayExercise = sum(todayExercises, "calories");
     const todayDeficit = metrics.tdee + todayExercise - todayIntake;
     const monthSpending = sum(monthFoods, "amount");
-    const dayOfMonth = new Date().getDate();
-    const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-    const budgetPerDay = body.monthlyBudget / daysInMonth;
-    const budgetSpentRatio = body.monthlyBudget > 0 ? monthSpending / body.monthlyBudget : 0;
-    const projectedMonthSpending = (monthSpending / dayOfMonth) * daysInMonth;
-    const remainingIntake = Math.max(metrics.suggestedIntake - todayIntake, 0);
+    const currentDay = dayOfMonth(currentDate);
+    const daysInMonth = daysInSelectedMonth(currentDate);
+    const remainingDaysInMonth = Math.max(daysInMonth - currentDay + 1, 1);
     const remainingBudget = Math.max(body.monthlyBudget - monthSpending, 0);
+    const budgetPerDay = remainingBudget / remainingDaysInMonth;
+    const budgetSpentRatio = body.monthlyBudget > 0 ? monthSpending / body.monthlyBudget : 0;
+    const projectedMonthSpending = (monthSpending / Math.max(currentDay, 1)) * daysInMonth;
+    const remainingIntake = Math.max(metrics.suggestedIntake - todayIntake, 0);
     const todayBudgetLeft = Math.max(budgetPerDay - sum(todayFoods, "amount"), 0);
     const drinkDessertSpending = sum(
       monthFoods.filter((item) => item.category === "饮料" || item.category === "甜品"),
@@ -293,9 +354,9 @@ function HomeApp({ userId }: { userId: string }) {
       remainingIntake,
       todaySpending: sum(todayFoods, "amount"),
       monthSpending,
-      monthAverageSpending: monthSpending / dayOfMonth,
+      monthAverageSpending: monthSpending / Math.max(currentDay, 1),
       monthIntake: sum(monthFoods, "calories"),
-      monthAverageIntake: sum(monthFoods, "calories") / dayOfMonth,
+      monthAverageIntake: sum(monthFoods, "calories") / Math.max(currentDay, 1),
       drinkSpending: sum(monthFoods.filter((item) => item.category === "饮料"), "amount"),
       dessertSpending: sum(monthFoods.filter((item) => item.category === "甜品"), "amount"),
       drinkDessertSpending,
@@ -303,6 +364,7 @@ function HomeApp({ userId }: { userId: string }) {
       deliverySpending,
       deliveryRatio: monthSpending > 0 ? deliverySpending / monthSpending : 0,
       budgetPerDay,
+      remainingDaysInMonth,
       budgetSpentRatio,
       calorieProgressRatio: metrics.suggestedIntake > 0 ? todayIntake / metrics.suggestedIntake : 0,
       projectedMonthSpending,
@@ -312,21 +374,109 @@ function HomeApp({ userId }: { userId: string }) {
       sourceSpending,
       mealCalories
     };
-  }, [body.monthlyBudget, body.targetDeficit, exercises, foods, metrics.suggestedIntake, metrics.tdee]);
+  }, [body.monthlyBudget, body.targetDeficit, exercises, foods, metrics.suggestedIntake, metrics.tdee, selectedDate]);
 
   function sum<T extends { [K in keyof T]: T[K] }>(items: T[], key: keyof T) {
     return items.reduce((total, item) => total + Number(item[key] || 0), 0);
   }
 
+  function fillSampleData() {
+    const currentDate = selectedDate || today();
+    setFoods([
+      {
+        id: uid(),
+        name: "鸡胸肉饭",
+        amount: 25,
+        calories: 500,
+        calorieConfidence: "估算",
+        category: "正餐",
+        meal: "午餐",
+        source: "外卖",
+        payment: "微信",
+        date: currentDate,
+        note: "示例数据"
+      },
+      {
+        id: uid(),
+        name: "豆浆 200ml",
+        amount: 3,
+        calories: 90,
+        calorieConfidence: "估算",
+        category: "饮料",
+        meal: "早餐",
+        source: "便利店",
+        payment: "微信",
+        date: currentDate,
+        note: "示例数据"
+      },
+      {
+        id: uid(),
+        name: "水果一份",
+        amount: 8,
+        calories: "",
+        calorieConfidence: "待补充",
+        category: "水果",
+        meal: "加餐",
+        source: "便利店",
+        payment: "支付宝",
+        date: currentDate,
+        note: "示例：热量可以之后补"
+      }
+    ]);
+    setExercises([
+      {
+        id: uid(),
+        name: "快走",
+        minutes: 30,
+        calories: 160,
+        date: currentDate,
+        note: "示例数据"
+      }
+    ]);
+  }
+
   function saveFood(event: FormEvent) {
     event.preventDefault();
     if (!foodForm.name.trim()) return;
-    const record: FoodRecord = { ...foodForm, id: editingFoodId ?? uid() };
+    const record: FoodRecord = {
+      ...foodForm,
+      calories: foodForm.calories === "" ? "" : Number(foodForm.calories),
+      amount: Number(foodForm.amount || 0),
+      id: editingFoodId ?? uid()
+    };
     setFoods((current) =>
       editingFoodId ? current.map((item) => (item.id === editingFoodId ? record : item)) : [record, ...current]
     );
-    setFoodForm({ ...defaultFood, date: today() });
+    setFoodForm({ ...defaultFood, date: selectedDate });
     setEditingFoodId(null);
+  }
+
+  function saveCurrentAsTemplate() {
+    if (!foodForm.name.trim()) return;
+    const template: FoodTemplate = {
+      id: editingTemplateId ?? uid(),
+      name: foodForm.name.trim(),
+      amount: Number(foodForm.amount || 0),
+      calories: foodForm.calories === "" ? "" : Number(foodForm.calories),
+      calorieConfidence: foodForm.calorieConfidence,
+      category: foodForm.category
+    };
+    setTemplates((current) =>
+      editingTemplateId ? current.map((item) => (item.id === editingTemplateId ? template : item)) : [template, ...current]
+    );
+    setEditingTemplateId(null);
+  }
+
+  function editTemplate(item: FoodTemplate) {
+    setEditingTemplateId(item.id);
+    setFoodForm((current) => ({
+      ...current,
+      name: item.name,
+      amount: item.amount,
+      calories: item.calories,
+      calorieConfidence: item.calorieConfidence,
+      category: item.category
+    }));
   }
 
   function saveExercise(event: FormEvent) {
@@ -336,7 +486,7 @@ function HomeApp({ userId }: { userId: string }) {
     setExercises((current) =>
       editingExerciseId ? current.map((item) => (item.id === editingExerciseId ? record : item)) : [record, ...current]
     );
-    setExerciseForm({ ...defaultExercise, date: today() });
+    setExerciseForm({ ...defaultExercise, date: selectedDate });
     setEditingExerciseId(null);
   }
 
@@ -373,6 +523,7 @@ function HomeApp({ userId }: { userId: string }) {
         ...current,
         name: estimate.name || current.name,
         calories: Number(estimate.calories || current.calories),
+        calorieConfidence: "估算",
         category: estimate.category || current.category
       }));
     } catch (error) {
@@ -419,6 +570,24 @@ function HomeApp({ userId }: { userId: string }) {
         </div>
       </nav>
 
+      <DateSwitcher selectedDate={selectedDate} onChange={setSelectedDate} />
+
+      {foods.length + exercises.length === 0 && (
+        <section className="mb-4 rounded-[22px] border border-white/70 bg-paper p-4 shadow-soft backdrop-blur-xl sm:flex sm:items-center sm:justify-between sm:gap-4 sm:p-5">
+          <div>
+            <p className="font-semibold text-ink">想先看看完整效果？</p>
+            <p className="mt-1 text-sm leading-6 text-muted">一键放入几条示例吃喝和运动记录，之后你也可以在设置里清空。</p>
+          </div>
+          <button
+            className="mt-3 rounded-full bg-apple px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(0,122,255,0.22)] sm:mt-0"
+            onClick={fillSampleData}
+            type="button"
+          >
+            填入示例数据
+          </button>
+        </section>
+      )}
+
       <section className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
         <DashboardAction
           title="记一餐"
@@ -441,7 +610,7 @@ function HomeApp({ userId }: { userId: string }) {
         <DashboardAction
           title="看支出"
           value={`${money(stats.todaySpending)} / ${money(stats.budgetPerDay)}`}
-          note={`本月剩余 ${money(stats.remainingBudget)}`}
+          note={`剩 ${stats.remainingDaysInMonth} 天 · 本月剩余 ${money(stats.remainingBudget)}`}
           onClick={() => openSection("month")}
         />
       </section>
@@ -449,7 +618,7 @@ function HomeApp({ userId }: { userId: string }) {
       {activeSection === "record" && (
         <section>
           <Card title="今天还能吃什么" className="mt-4">
-            <TemplateSuggestions remainingIntake={stats.remainingIntake} templates={templates} />
+            <TemplateSuggestions remainingIntake={stats.remainingIntake} remainingBudget={stats.todayBudgetLeft} templates={templates} />
           </Card>
 
       <div className="mt-4 grid gap-3 sm:gap-4 lg:grid-cols-[1.45fr_0.75fr]">
@@ -503,7 +672,17 @@ function HomeApp({ userId }: { userId: string }) {
           <form className="grid gap-3 sm:grid-cols-2" onSubmit={saveFood}>
             <Text label="名称" value={foodForm.name} onChange={(value) => setFoodForm({ ...foodForm, name: value })} />
             <Field label="金额" value={foodForm.amount} step="0.01" onChange={(value) => setFoodForm({ ...foodForm, amount: Number(value) })} />
-            <Field label="热量 kcal" value={foodForm.calories} onChange={(value) => setFoodForm({ ...foodForm, calories: Number(value) })} />
+            <Field
+              label="热量 kcal，可空"
+              value={foodForm.calories}
+              onChange={(value) =>
+                setFoodForm({
+                  ...foodForm,
+                  calories: value === "" ? "" : Number(value),
+                  calorieConfidence: value === "" ? "待补充" : foodForm.calorieConfidence === "待补充" ? "估算" : foodForm.calorieConfidence
+                })
+              }
+            />
             <Select label="餐次" value={foodForm.meal} options={meals} onChange={(value) => setFoodForm({ ...foodForm, meal: value as Meal })} />
             <button
               type="button"
@@ -515,6 +694,7 @@ function HomeApp({ userId }: { userId: string }) {
             {foodMoreOpen && (
               <div className="grid gap-3 rounded-[20px] bg-white/60 p-3 sm:col-span-2 sm:grid-cols-2">
                 <Select label="分类" value={foodForm.category} options={categories} onChange={(value) => setFoodForm({ ...foodForm, category: value as Category })} />
+                <Select label="热量可信度" value={foodForm.calorieConfidence} options={calorieConfidences} onChange={(value) => setFoodForm({ ...foodForm, calorieConfidence: value as CalorieConfidence })} />
                 <Select label="来源" value={foodForm.source} options={sources} onChange={(value) => setFoodForm({ ...foodForm, source: value as Source })} />
                 <Select label="支付方式" value={foodForm.payment} options={payments} onChange={(value) => setFoodForm({ ...foodForm, payment: value as Payment })} />
                 <Text label="日期" type="date" value={foodForm.date} onChange={(value) => setFoodForm({ ...foodForm, date: value })} />
@@ -527,6 +707,13 @@ function HomeApp({ userId }: { userId: string }) {
             <button className="rounded-2xl bg-apple px-4 py-3 font-semibold text-white shadow-[0_10px_24px_rgba(0,122,255,0.24)] transition hover:bg-[#006fe6] sm:col-span-2">
               {editingFoodId ? "保存吃喝记录" : "新增吃喝记录"}
             </button>
+            <button
+              className="rounded-2xl bg-[#f2f2f7] px-4 py-3 text-sm font-semibold text-apple transition hover:bg-white sm:col-span-2"
+              type="button"
+              onClick={saveCurrentAsTemplate}
+            >
+              {editingTemplateId ? "保存常吃模板修改" : "把当前内容存为常吃模板"}
+            </button>
           </form>
 
           <div className="mt-5 border-t border-line/70 pt-4">
@@ -536,14 +723,37 @@ function HomeApp({ userId }: { userId: string }) {
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1">
               {templates.map((item) => (
-                <button
-                  key={`${item.name}-${item.calories}`}
-                  className="shrink-0 rounded-full bg-[#f2f2f7] px-4 py-2 text-left transition hover:bg-white hover:shadow-[0_8px_22px_rgba(0,0,0,0.06)]"
-                  onClick={() => setFoodForm({ ...foodForm, ...item })}
-                >
-                  <span className="block text-sm font-semibold text-ink">{item.name}</span>
-                  <span className="text-xs text-muted">{money(item.amount)} · {item.calories} kcal</span>
-                </button>
+                <div key={item.id} className="shrink-0 rounded-[22px] bg-[#f2f2f7] p-2">
+                  <button
+                    className="block min-w-32 rounded-2xl px-2 py-1 text-left transition hover:bg-white"
+                    onClick={() =>
+                      setFoodForm({
+                        ...foodForm,
+                        name: item.name,
+                        amount: item.amount,
+                        calories: item.calories,
+                        calorieConfidence: item.calorieConfidence,
+                        category: item.category
+                      })
+                    }
+                    type="button"
+                  >
+                    <span className="block text-sm font-semibold text-ink">{item.name}</span>
+                    <span className="text-xs text-muted">{money(item.amount)} · {calorieText(item)}</span>
+                  </button>
+                  <div className="mt-1 flex gap-1">
+                    <button className="rounded-full bg-white px-3 py-1 text-xs font-medium text-apple" type="button" onClick={() => editTemplate(item)}>
+                      编辑
+                    </button>
+                    <button
+                      className="rounded-full bg-[#fff1f0] px-3 py-1 text-xs font-medium text-tomato"
+                      type="button"
+                      onClick={() => setTemplates((current) => current.filter((template) => template.id !== item.id))}
+                    >
+                      删除
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
@@ -570,7 +780,7 @@ function HomeApp({ userId }: { userId: string }) {
           )}
         </Card>
       </div>
-      <Card title="今日记录" className="mt-4">
+      <Card title={`${selectedDateLabel(selectedDate)}记录`} className="mt-4">
         <TodayRecords
           meals={meals}
           todayFoods={stats.todayFoods}
@@ -593,7 +803,7 @@ function HomeApp({ userId }: { userId: string }) {
 
       {activeSection === "today" && (
       <section>
-      <Card title="今日时间线" className="mt-4">
+      <Card title={`${selectedDateLabel(selectedDate)}时间线`} className="mt-4">
         <TodayRecords
           meals={meals}
           todayFoods={stats.todayFoods}
@@ -674,7 +884,7 @@ function HomeApp({ userId }: { userId: string }) {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Stat title="本月吃喝总支出" value={money(stats.monthSpending)} />
           <Stat title="本月预算剩余" value={money(stats.remainingBudget)} note={`预算 ${money(body.monthlyBudget)}`} />
-          <Stat title="今日建议可花" value={money(stats.budgetPerDay)} note={`今日还可花 ${money(stats.todayBudgetLeft)}`} />
+          <Stat title="今日建议可花" value={money(stats.budgetPerDay)} note={`按剩余 ${stats.remainingDaysInMonth} 天重算 · 今日还可花 ${money(stats.todayBudgetLeft)}`} />
           <Stat title="本月平均每日支出" value={money(stats.monthAverageSpending)} />
           <Stat title="本月总摄入热量" value={`${round(stats.monthIntake)} kcal`} />
           <Stat title="本月平均每日摄入" value={`${round(stats.monthAverageIntake)} kcal`} />
@@ -696,15 +906,60 @@ function stripId<T extends { id: string }>(item: T): Omit<T, "id"> {
   return rest;
 }
 
+function DateSwitcher({ selectedDate, onChange }: { selectedDate: string; onChange: (value: string) => void }) {
+  const quickDates = [
+    { label: "今天", value: dateByOffset(0) },
+    { label: "昨天", value: dateByOffset(-1) },
+    { label: "前天", value: dateByOffset(-2) }
+  ];
+
+  return (
+    <section className="mb-4 flex flex-col gap-2 rounded-[22px] border border-white/70 bg-paper p-2 shadow-soft backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex gap-2 overflow-x-auto">
+        {quickDates.map((item) => (
+          <button
+            key={item.label}
+            className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition ${
+              selectedDate === item.value ? "bg-apple text-white" : "bg-[#f2f2f7] text-ink hover:bg-white"
+            }`}
+            onClick={() => onChange(item.value)}
+            type="button"
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <label className="flex items-center gap-2 rounded-full bg-[#f2f2f7] px-4 py-2 text-sm text-muted">
+        指定日期
+        <input className="bg-transparent font-semibold text-ink outline-none" type="date" value={selectedDate} onChange={(event) => onChange(event.target.value)} />
+      </label>
+    </section>
+  );
+}
+
 function TemplateSuggestions({
   remainingIntake,
+  remainingBudget,
   templates
 }: {
   remainingIntake: number;
+  remainingBudget: number;
   templates: FoodTemplate[];
 }) {
-  const suggestions = templates
-    .filter((item) => item.calories <= remainingIntake)
+  const availableTemplates = templates.filter((item) => item.calorieConfidence !== "待补充" && item.calories !== "");
+  const suggestions = availableTemplates
+    .filter((item) => calorieValue(item.calories) <= remainingIntake && item.amount <= remainingBudget)
+    .sort((a, b) => calorieValue(b.calories) - calorieValue(a.calories))
+    .slice(0, 3);
+  const combos = availableTemplates
+    .flatMap((first, firstIndex) =>
+      availableTemplates.slice(firstIndex + 1).map((second) => ({
+        names: `${first.name} + ${second.name}`,
+        calories: calorieValue(first.calories) + calorieValue(second.calories),
+        amount: first.amount + second.amount
+      }))
+    )
+    .filter((item) => item.calories <= remainingIntake && item.amount <= remainingBudget)
     .sort((a, b) => b.calories - a.calories)
     .slice(0, 3);
 
@@ -712,23 +967,48 @@ function TemplateSuggestions({
     return <p className="rounded-2xl bg-[#fff1f0] p-4 text-sm leading-6 text-tomato">今天的目标摄入额度已经用完了，可以优先选择低热量饮品或把运动记录补上。</p>;
   }
 
-  if (suggestions.length === 0) {
-    return <p className="rounded-2xl bg-[#f2f2f7] p-4 text-sm leading-6 text-muted">今天还能吃 {round(remainingIntake)} kcal，但常吃模板里暂时没有刚好适合的选择。</p>;
+  if (remainingBudget <= 0) {
+    return <p className="rounded-2xl bg-[#fff1f0] p-4 text-sm leading-6 text-tomato">今天还剩 {round(remainingIntake)} kcal，但今日建议预算已经用完了。可以优先选家里现成的食物。</p>;
+  }
+
+  if (suggestions.length + combos.length === 0) {
+    return <p className="rounded-2xl bg-[#f2f2f7] p-4 text-sm leading-6 text-muted">今天还能吃 {round(remainingIntake)} kcal，还可花 {money(remainingBudget)}，但常吃模板里暂时没有合适的选择。</p>;
   }
 
   return (
-    <div className="grid gap-3 sm:grid-cols-[1fr_2fr] sm:items-center">
+    <div className="grid gap-3 lg:grid-cols-[0.9fr_2fr] lg:items-center">
       <div>
         <p className="text-3xl font-semibold text-ink sm:text-4xl">{round(remainingIntake)} kcal</p>
         <p className="mt-1 text-sm text-muted">今天剩余可摄入</p>
+        <p className="mt-1 text-sm text-muted">今日还可花 {money(remainingBudget)}</p>
       </div>
-      <div className="grid gap-2 sm:grid-cols-3">
-        {suggestions.map((item) => (
-          <div key={`${item.name}-suggestion`} className="rounded-2xl bg-[#f2f2f7] p-4">
-            <p className="font-semibold text-ink">{item.name}</p>
-            <p className="mt-1 text-sm text-muted">{item.calories} kcal · {money(item.amount)}</p>
+      <div className="space-y-3">
+        {suggestions.length > 0 && (
+          <div>
+            <p className="mb-2 text-sm font-semibold text-muted">单个选择</p>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {suggestions.map((item) => (
+                <div key={`${item.id}-suggestion`} className="rounded-2xl bg-[#f2f2f7] p-4">
+                  <p className="font-semibold text-ink">{item.name}</p>
+                  <p className="mt-1 text-sm text-muted">{round(calorieValue(item.calories))} kcal · {money(item.amount)}</p>
+                </div>
+              ))}
+            </div>
           </div>
-        ))}
+        )}
+        {combos.length > 0 && (
+          <div>
+            <p className="mb-2 text-sm font-semibold text-muted">两样组合</p>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {combos.map((item) => (
+                <div key={`${item.names}-combo`} className="rounded-2xl bg-[#f2f2f7] p-4">
+                  <p className="font-semibold text-ink">{item.names}</p>
+                  <p className="mt-1 text-sm text-muted">{round(item.calories)} kcal · {money(item.amount)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -763,7 +1043,7 @@ function TodayRecords({
                 key={item.id}
                 title={item.name}
                 meta={`${item.category} · ${item.source} · ${item.payment}`}
-                value={`${money(item.amount)} · ${item.calories} kcal`}
+                value={`${money(item.amount)} · ${calorieText(item)}`}
                 onEdit={() => onEditFood(item)}
                 onDelete={() => onDeleteFood(item)}
               />

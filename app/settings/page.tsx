@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import AuthGate from "../components/AuthGate";
 
 type Activity = "久坐" | "轻度活动" | "中度活动" | "高度活动";
@@ -53,6 +53,27 @@ function saveBody(userId: string, body: BodyData) {
   window.localStorage.setItem(`eatcost.${userId}.body`, JSON.stringify(body));
 }
 
+function loadUserValue<T>(userId: string, key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  const raw = window.localStorage.getItem(`eatcost.${userId}.${key}`) || window.localStorage.getItem(`eatcost.${key}`);
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveUserValue<T>(userId: string, key: string, value: T) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(`eatcost.${userId}.${key}`, JSON.stringify(value));
+}
+
+function removeUserValue(userId: string, key: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(`eatcost.${userId}.${key}`);
+}
+
 function money(value: number) {
   return `¥${value.toFixed(2)}`;
 }
@@ -93,6 +114,53 @@ function SettingsApp({ userId }: { userId: string }) {
   const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
   const dailyBudget = body.monthlyBudget / daysInMonth;
 
+  function exportJson() {
+    const data = {
+      exportedAt: new Date().toISOString(),
+      body: loadUserValue(userId, "body", defaultBody),
+      foods: loadUserValue(userId, "foods", []),
+      exercises: loadUserValue(userId, "exercises", []),
+      templates: loadUserValue(userId, "templates", [])
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `eatcost-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function importJson(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      if (data.body) {
+        const nextBody = { ...defaultBody, ...data.body };
+        saveUserValue(userId, "body", nextBody);
+        setBody(nextBody);
+      }
+      if (Array.isArray(data.foods)) saveUserValue(userId, "foods", data.foods);
+      if (Array.isArray(data.exercises)) saveUserValue(userId, "exercises", data.exercises);
+      if (Array.isArray(data.templates)) saveUserValue(userId, "templates", data.templates);
+      window.alert("导入成功，回到首页就能看到数据。");
+    } catch {
+      window.alert("这个 JSON 文件读不了，请确认是 Eatcost 导出的备份。");
+    }
+  }
+
+  function clearAllData() {
+    const first = window.confirm("确定要清空 Eatcost 的所有本地数据吗？这会删除吃喝记录、运动记录和常吃模板。");
+    if (!first) return;
+    const second = window.confirm("再确认一次：清空后无法恢复，除非你已经导出过 JSON 备份。确定清空吗？");
+    if (!second) return;
+    ["body", "foods", "exercises", "templates"].forEach((key) => removeUserValue(userId, key));
+    setBody(defaultBody);
+    window.alert("已经清空。");
+  }
+
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:py-10">
       <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -131,6 +199,22 @@ function SettingsApp({ userId }: { userId: string }) {
           <Field label="本月吃喝预算 ¥" value={body.monthlyBudget} step="1" onChange={(value) => setBody({ ...body, monthlyBudget: Number(value) })} />
           <Stat title="平均每天可花" value={money(dailyBudget)} />
           <Stat title="当前月预算" value={money(body.monthlyBudget)} />
+        </div>
+      </section>
+
+      <section className="mt-4 rounded-[22px] border border-white/70 bg-paper p-5 shadow-soft backdrop-blur-xl">
+        <h2 className="mb-4 text-xl font-semibold text-ink">数据管理</h2>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <button className="rounded-2xl bg-[#f2f2f7] px-4 py-3 font-semibold text-apple transition hover:bg-white" type="button" onClick={exportJson}>
+            导出 JSON
+          </button>
+          <label className="cursor-pointer rounded-2xl bg-[#f2f2f7] px-4 py-3 text-center font-semibold text-apple transition hover:bg-white">
+            导入 JSON
+            <input className="hidden" type="file" accept="application/json,.json" onChange={importJson} />
+          </label>
+          <button className="rounded-2xl bg-[#fff1f0] px-4 py-3 font-semibold text-tomato transition hover:bg-white" type="button" onClick={clearAllData}>
+            清空所有数据
+          </button>
         </div>
       </section>
     </main>

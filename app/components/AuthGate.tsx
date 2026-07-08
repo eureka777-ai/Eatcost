@@ -13,7 +13,9 @@ export default function AuthGate({ children }: AuthGateProps) {
   const [ready, setReady] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [newPassword, setNewPassword] = useState("");
+  const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
+  const [recoveryMode, setRecoveryMode] = useState(false);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -23,16 +25,36 @@ export default function AuthGate({ children }: AuthGateProps) {
       return;
     }
 
+    const fallbackTimer = window.setTimeout(() => {
+      setReady(true);
+    }, 6000);
+
     supabase.auth.getSession().then(({ data }) => {
+      if (window.location.hash.includes("type=recovery")) {
+        setRecoveryMode(true);
+      }
       setUser(data.session?.user ?? null);
       setReady(true);
+      window.clearTimeout(fallbackTimer);
+    }).catch(() => {
+      setReady(true);
+      window.clearTimeout(fallbackTimer);
     });
 
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setRecoveryMode(true);
+      }
+      if (event === "SIGNED_OUT") {
+        setRecoveryMode(false);
+      }
       setUser(session?.user ?? null);
     });
 
-    return () => data.subscription.unsubscribe();
+    return () => {
+      window.clearTimeout(fallbackTimer);
+      data.subscription.unsubscribe();
+    };
   }, []);
 
   async function handleAuth(event: FormEvent) {
@@ -57,9 +79,38 @@ export default function AuthGate({ children }: AuthGateProps) {
     setLoading(false);
   }
 
-  async function signOut() {
+  async function sendResetEmail(event: FormEvent) {
+    event.preventDefault();
     if (!supabase) return;
-    await supabase.auth.signOut();
+
+    setLoading(true);
+    setMessage("");
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/`
+    });
+
+    setMessage(error ? toFriendlyAuthError(error.message) : "重置密码邮件已发送，请去邮箱里点链接。");
+    setLoading(false);
+  }
+
+  async function updatePassword(event: FormEvent) {
+    event.preventDefault();
+    if (!supabase) return;
+
+    setLoading(true);
+    setMessage("");
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      setMessage(toFriendlyAuthError(error.message));
+    } else {
+      setRecoveryMode(false);
+      setNewPassword("");
+      setMessage("密码已更新。");
+    }
+
+    setLoading(false);
   }
 
   if (!ready) {
@@ -78,10 +129,34 @@ export default function AuthGate({ children }: AuthGateProps) {
     );
   }
 
+  if (recoveryMode) {
+    return (
+      <AuthShell title="重设密码" subtitle="输入一个新密码，之后就可以继续使用 Eatcost。">
+        <form className="mt-6 grid gap-3" onSubmit={updatePassword}>
+          <label>
+            <span className="mb-1 block text-sm text-muted">新密码</span>
+            <input
+              className="h-12 w-full rounded-2xl border border-transparent bg-[#f2f2f7] px-4 text-ink outline-none transition focus:border-apple/40 focus:bg-white focus:ring-4 focus:ring-apple/10"
+              type="password"
+              minLength={6}
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              required
+            />
+          </label>
+          {message && <p className="rounded-2xl bg-[#f2f2f7] p-3 text-sm leading-6 text-muted">{message}</p>}
+          <button className="rounded-2xl bg-apple px-4 py-3 font-semibold text-white shadow-[0_10px_24px_rgba(0,122,255,0.24)]" disabled={loading}>
+            {loading ? "保存中..." : "保存新密码"}
+          </button>
+        </form>
+      </AuthShell>
+    );
+  }
+
   if (!user) {
     return (
       <AuthShell title="Eatcost" subtitle="登录后开始记录你的每餐价格和热量。">
-        <form className="mt-6 grid gap-3" onSubmit={handleAuth}>
+        <form className="mt-6 grid gap-3" onSubmit={mode === "forgot" ? sendResetEmail : handleAuth}>
           <label>
             <span className="mb-1 block text-sm text-muted">邮箱</span>
             <input
@@ -92,21 +167,35 @@ export default function AuthGate({ children }: AuthGateProps) {
               required
             />
           </label>
-          <label>
-            <span className="mb-1 block text-sm text-muted">密码</span>
-            <input
-              className="h-12 w-full rounded-2xl border border-transparent bg-[#f2f2f7] px-4 text-ink outline-none transition focus:border-apple/40 focus:bg-white focus:ring-4 focus:ring-apple/10"
-              type="password"
-              minLength={6}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-            />
-          </label>
+          {mode !== "forgot" && (
+            <label>
+              <span className="mb-1 block text-sm text-muted">密码</span>
+              <input
+                className="h-12 w-full rounded-2xl border border-transparent bg-[#f2f2f7] px-4 text-ink outline-none transition focus:border-apple/40 focus:bg-white focus:ring-4 focus:ring-apple/10"
+                type="password"
+                minLength={6}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+              />
+            </label>
+          )}
           {message && <p className="rounded-2xl bg-[#f2f2f7] p-3 text-sm leading-6 text-muted">{message}</p>}
           <button className="rounded-2xl bg-apple px-4 py-3 font-semibold text-white shadow-[0_10px_24px_rgba(0,122,255,0.24)]" disabled={loading}>
-            {loading ? "处理中..." : mode === "login" ? "登录" : "注册"}
+            {loading ? "处理中..." : mode === "login" ? "登录" : mode === "signup" ? "注册" : "发送重置邮件"}
           </button>
+          {mode === "login" && (
+            <button
+              className="rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-muted"
+              type="button"
+              onClick={() => {
+                setMode("forgot");
+                setMessage("");
+              }}
+            >
+              忘记密码？
+            </button>
+          )}
           <button
             className="rounded-2xl bg-[#f2f2f7] px-4 py-3 text-sm font-semibold text-apple"
             type="button"
@@ -122,17 +211,7 @@ export default function AuthGate({ children }: AuthGateProps) {
     );
   }
 
-  return (
-    <>
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-3 pt-4 text-sm text-muted sm:px-6">
-        <span>{user.email}</span>
-        <button className="rounded-full bg-white px-4 py-2 font-semibold text-apple shadow-[0_8px_22px_rgba(0,0,0,0.06)]" onClick={signOut}>
-          退出
-        </button>
-      </div>
-      {children(user)}
-    </>
-  );
+  return <>{children(user)}</>;
 }
 
 function AuthShell({
@@ -159,6 +238,7 @@ function AuthShell({
 function toFriendlyAuthError(message: string) {
   if (message.includes("Invalid login credentials")) return "邮箱或密码不对。";
   if (message.includes("Email not confirmed")) return "邮箱还没有验证，请先去邮箱点确认链接。";
+  if (message.includes("rate limit")) return "邮件发送太频繁了，请稍后再试。";
   if (message.includes("Password")) return "密码至少需要 6 位。";
   return message || "登录失败，请稍后再试。";
 }
