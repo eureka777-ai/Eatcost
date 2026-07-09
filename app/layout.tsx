@@ -1,23 +1,31 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+const asset = (path: string) => `${basePath}${path}`;
+
 export const metadata: Metadata = {
   title: "Eatcost",
   description: "记录吃喝支出、热量摄入和每日目标。",
-  manifest: "/manifest.webmanifest",
+  applicationName: "Eatcost",
+  manifest: asset("/manifest.webmanifest"),
   appleWebApp: {
     capable: true,
     title: "Eatcost",
-    statusBarStyle: "default"
+    statusBarStyle: "black-translucent"
   },
   icons: {
-    icon: "/icon.svg",
-    apple: "/apple-touch-icon.svg"
+    icon: [
+      { url: asset("/icon.svg"), type: "image/svg+xml" },
+      { url: asset("/icon-192.png"), sizes: "192x192", type: "image/png" },
+      { url: asset("/icon-512.png"), sizes: "512x512", type: "image/png" }
+    ],
+    apple: [{ url: asset("/apple-touch-icon.png"), sizes: "180x180", type: "image/png" }]
   }
 };
 
 export const viewport: Viewport = {
-  themeColor: "#f5f5f7",
+  themeColor: "#007aff",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover"

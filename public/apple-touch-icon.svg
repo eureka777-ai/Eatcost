@@ -5,7 +5,7 @@
   <path d="M72 66H108" stroke="white" stroke-width="11" stroke-linecap="round"/>
   <path d="M72 90H101" stroke="white" stroke-width="11" stroke-linecap="round"/>
   <path d="M72 114H94" stroke="white" stroke-width="11" stroke-linecap="round"/>
-  <circle cx="115" cy="115" r="18" fill="#30D158" stroke="white" stroke-width="7"/>
+  <circle cx="115" cy="115" r="18" fill="#5AC8FA" stroke="white" stroke-width="7"/>
   <path d="M108 115H122" stroke="white" stroke-width="6" stroke-linecap="round"/>
   <path d="M115 108V122" stroke="white" stroke-width="6" stroke-linecap="round"/>
 </svg>
