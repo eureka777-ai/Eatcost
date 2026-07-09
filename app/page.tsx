@@ -272,6 +272,7 @@ function HomeApp({ userId }: { userId: string }) {
   const [editingFoodId, setEditingFoodId] = useState<string | null>(null);
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
   const [foodMoreOpen, setFoodMoreOpen] = useState(false);
+  const [foodOpen, setFoodOpen] = useState(false);
   const [exerciseOpen, setExerciseOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<Section>("record");
   const [selectedDate, setSelectedDate] = useState(today());
@@ -477,6 +478,7 @@ function HomeApp({ userId }: { userId: string }) {
     );
     setFoodForm({ ...defaultFood, date: selectedDate });
     setEditingFoodId(null);
+    setFoodOpen(false);
     setNotice(editingFoodId ? "吃喝记录已保存" : "已新增吃喝记录");
   }
 
@@ -499,6 +501,7 @@ function HomeApp({ userId }: { userId: string }) {
 
   function editTemplate(item: FoodTemplate) {
     setEditingTemplateId(item.id);
+    setFoodOpen(true);
     setFoodForm((current) => ({
       ...current,
       name: item.name,
@@ -507,6 +510,24 @@ function HomeApp({ userId }: { userId: string }) {
       calorieConfidence: item.calorieConfidence,
       category: item.category
     }));
+  }
+
+  function openFoodModal() {
+    setEditingFoodId(null);
+    setEditingTemplateId(null);
+    setAiEstimate(null);
+    setAiError("");
+    setFoodForm({ ...defaultFood, date: selectedDate });
+    setFoodOpen(true);
+  }
+
+  function closeFoodModal() {
+    setFoodOpen(false);
+    setEditingFoodId(null);
+    setEditingTemplateId(null);
+    setAiEstimate(null);
+    setAiError("");
+    setFoodForm({ ...defaultFood, date: selectedDate });
   }
 
   function saveExercise(event: FormEvent) {
@@ -794,180 +815,16 @@ function HomeApp({ userId }: { userId: string }) {
         </div>
       </section>}
 
-      {activeSection === "record" && <section id="section-record" className="animate-[cardIn_0.24s_ease-out] scroll-mt-4">
-        <SectionHeader eyebrow="Record" title="快速记录" note="常吃、拍照、手动输入都放在这里，记完马上能在时间线看到。" />
-        <div className="grid items-start gap-3 lg:grid-cols-[1.35fr_0.9fr]">
-          <Card title="记录吃喝">
-            <div className="mb-4 rounded-[18px] bg-[#f5f5f7] p-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-ink">拍照估算热量</p>
-                  <p className="mt-1 text-xs leading-5 text-muted">照片识别只帮你预填名称和热量，价格还是你自己确认。</p>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <label className="btn-secondary cursor-pointer rounded-full px-4 py-2 text-center text-sm font-semibold text-apple">
-                    {aiLoading ? "识别中..." : "拍照"}
-                    <input
-                      className="hidden"
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      disabled={aiLoading}
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) analyzeMealPhoto(file);
-                        event.currentTarget.value = "";
-                      }}
-                    />
-                  </label>
-                  <label className="btn-secondary cursor-pointer rounded-full px-4 py-2 text-center text-sm font-semibold text-apple">
-                    上传
-                    <input
-                      className="hidden"
-                      type="file"
-                      accept="image/*"
-                      disabled={aiLoading}
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) analyzeMealPhoto(file);
-                        event.currentTarget.value = "";
-                      }}
-                    />
-                  </label>
-                </div>
-              </div>
-              {aiEstimate && (
-                <div className="mt-3 rounded-2xl bg-white p-3 text-sm text-muted">
-                  <span className="font-semibold text-ink">{aiEstimate.name}</span> · 约 {aiEstimate.calories} kcal · 可信度 {aiEstimate.confidence}
-                  {aiEstimate.note && <p className="mt-1">{aiEstimate.note}</p>}
-                </div>
-              )}
-              {aiError && <p className="mt-3 rounded-2xl bg-[#fff1f0] p-3 text-sm text-tomato">{aiError}</p>}
-            </div>
-
-            <div className="mb-4 border-y border-line/70 py-3">
-              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-ink">常吃快捷</p>
-                  <p className="mt-0.5 text-xs text-muted">导入模板，或把当前填写的内容存成常吃。</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <label className="btn-secondary cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold text-apple">
-                    导入模板
-                    <input className="hidden" type="file" accept="application/json,.json" onChange={importTemplateFile} />
-                  </label>
-                  <button className="btn-secondary rounded-full px-3 py-1.5 text-xs font-semibold text-apple" type="button" onClick={saveCurrentAsTemplate}>
-                    {editingTemplateId ? "保存模板" : "存为模板"}
-                  </button>
-                  {templates.length > 0 && (
-                    <button className="btn-danger rounded-full px-3 py-1.5 text-xs font-semibold" type="button" onClick={clearTemplates}>
-                      清空模板
-                    </button>
-                  )}
-                </div>
-              </div>
-              {templates.length === 0 ? (
-                <div className="rounded-[18px] bg-[#f5f5f7] p-4">
-                  <p className="text-sm font-semibold text-ink">还没有常吃模板。</p>
-                  <p className="mt-1 text-xs leading-5 text-muted">可以导入 JSON 模板，也可以先手动填一餐，再点“存为模板”。</p>
-                </div>
-              ) : (
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {templates.map((item) => (
-                    <div key={item.id} className="shrink-0 rounded-[18px] bg-[#f2f2f7] p-2">
-                      <button
-                        className="block min-w-28 rounded-2xl px-2 py-1 text-left transition hover:bg-white"
-                        onClick={() =>
-                          setFoodForm({
-                            ...foodForm,
-                            name: item.name,
-                            amount: item.amount,
-                            calories: item.calories,
-                            calorieConfidence: item.calorieConfidence,
-                            category: item.category
-                          })
-                        }
-                        type="button"
-                      >
-                        <span className="block text-sm font-semibold text-ink">{item.name}</span>
-                        <span className="text-xs text-muted">{money(item.amount)} · {calorieText(item)}</span>
-                      </button>
-                      <div className="mt-1 flex gap-1">
-                        <button className="btn-secondary rounded-full px-3 py-1 text-xs font-medium text-apple" type="button" onClick={() => editTemplate(item)}>
-                          编辑
-                        </button>
-                        <button
-                          className="btn-danger rounded-full px-3 py-1 text-xs font-medium"
-                          type="button"
-                          onClick={() => setPendingDelete({ type: "template", id: item.id, name: item.name })}
-                        >
-                          删除
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <form className="grid gap-3 sm:grid-cols-2" onSubmit={saveFood}>
-              <Text label="名称" value={foodForm.name} onChange={(value) => setFoodForm({ ...foodForm, name: value })} />
-              <Field label="金额" value={foodForm.amount} step="0.01" onChange={(value) => setFoodForm({ ...foodForm, amount: Number(value) })} />
-              <Field
-                label="热量 kcal，可空"
-                value={foodForm.calories}
-                onChange={(value) =>
-                  setFoodForm({
-                    ...foodForm,
-                    calories: value === "" ? "" : Number(value),
-                    calorieConfidence: value === "" ? "待补充" : foodForm.calorieConfidence === "待补充" ? "估算" : foodForm.calorieConfidence
-                  })
-                }
-              />
-              <Select label="餐次" value={foodForm.meal} options={meals} onChange={(value) => setFoodForm({ ...foodForm, meal: value as Meal })} />
-              <button
-                type="button"
-                className="btn-secondary rounded-2xl px-4 py-3 text-sm font-medium text-muted sm:col-span-2"
-                onClick={() => setFoodMoreOpen((open) => !open)}
-              >
-                {foodMoreOpen ? "收起更多选项" : "更多选项：分类 / 来源 / 支付 / 备注"}
-              </button>
-              {foodMoreOpen && (
-                <div className="grid gap-3 rounded-[20px] bg-white/60 p-3 sm:col-span-2 sm:grid-cols-2">
-                  <Select label="分类" value={foodForm.category} options={categories} onChange={(value) => setFoodForm({ ...foodForm, category: value as Category })} />
-                  <Select label="热量可信度" value={foodForm.calorieConfidence} options={calorieConfidences} onChange={(value) => setFoodForm({ ...foodForm, calorieConfidence: value as CalorieConfidence })} />
-                  <Select label="来源" value={foodForm.source} options={sources} onChange={(value) => setFoodForm({ ...foodForm, source: value as Source })} />
-                  <Select label="支付方式" value={foodForm.payment} options={payments} onChange={(value) => setFoodForm({ ...foodForm, payment: value as Payment })} />
-                  <Text label="日期" type="date" value={foodForm.date} onChange={(value) => setFoodForm({ ...foodForm, date: value })} />
-                  <label className="sm:col-span-2">
-                    <span className="mb-1 block text-sm text-muted">备注</span>
-                    <textarea className="min-h-20 w-full rounded-2xl border border-transparent bg-[#f2f2f7] px-4 py-3 text-ink outline-none transition focus:border-apple/40 focus:bg-white focus:ring-4 focus:ring-apple/10" value={foodForm.note} onChange={(event) => setFoodForm({ ...foodForm, note: event.target.value })} />
-                  </label>
-                </div>
-              )}
-              <button className="btn-primary rounded-2xl px-4 py-3 font-semibold text-white sm:col-span-2">
-                {editingFoodId ? "保存吃喝记录" : "新增吃喝记录"}
-              </button>
-            </form>
+      {activeSection === "record" && <section id="section-record" className="animate-[cardIn_0.24s_ease-out] scroll-mt-4 pb-28 sm:pb-24">
+        <SectionHeader eyebrow="Record" title="今日记录" note="新增放到右下角，页面主体只看建议和当天记录。" />
+        <div className="grid items-start gap-3 lg:grid-cols-[0.82fr_1.18fr]">
+          <Card title="今天还能吃什么">
+            <TemplateSuggestions remainingIntake={stats.remainingIntake} remainingBudget={stats.todayBudgetLeft} templates={templates} />
           </Card>
 
-          <div className="grid gap-3 lg:sticky lg:top-24">
-            <Card title="今天还能吃什么">
-              <TemplateSuggestions remainingIntake={stats.remainingIntake} remainingBudget={stats.todayBudgetLeft} templates={templates} />
-            </Card>
-
-            <Card title="记录运动">
-              <p className="mb-4 text-sm leading-6 text-muted">运动不是每天必填，需要时再补一条消耗。</p>
-              <button className="btn-dark w-full rounded-2xl px-5 py-3 font-semibold text-white" onClick={openExerciseModal} type="button">
-                + 记录运动
-              </button>
-            </Card>
-          </div>
-        </div>
-
-        <Card title={`${selectedDateLabel(selectedDate)}时间线`} className="mt-3">
+          <Card title={`${selectedDateLabel(selectedDate)}时间线`}>
           {stats.todayFoods.length + stats.todayExercises.length === 0 ? (
-            <EmptyState title="今天还没开吃。" note="点一个常吃模板，或者先填入示例数据看看效果。" action="填入示例数据" onAction={fillSampleData} compact />
+            <EmptyState title="今天还没开吃。" note="点右下角“记饮食”，或者先填入示例数据看看效果。" action="填入示例数据" onAction={fillSampleData} compact />
           ) : (
             <TodayRecords
               meals={meals}
@@ -976,7 +833,7 @@ function HomeApp({ userId }: { userId: string }) {
               onEditFood={(item) => {
                 setFoodForm(stripId(item));
                 setEditingFoodId(item.id);
-                scrollToSection("record");
+                setFoodOpen(true);
               }}
               onDeleteFood={(item) => setPendingDelete({ type: "food", id: item.id, name: item.name })}
               onEditExercise={(item) => {
@@ -987,7 +844,8 @@ function HomeApp({ userId }: { userId: string }) {
               onDeleteExercise={(item) => setPendingDelete({ type: "exercise", id: item.id, name: item.name })}
             />
           )}
-        </Card>
+          </Card>
+        </div>
       </section>}
 
       {activeSection === "insights" && <section id="section-insights" className="animate-[cardIn_0.24s_ease-out] scroll-mt-4">
@@ -1086,6 +944,177 @@ function HomeApp({ userId }: { userId: string }) {
           </Card>
         </div>
       </section>}
+
+      {activeSection === "record" && (
+        <div className="fixed bottom-4 right-4 z-30 flex flex-col items-end gap-2 sm:bottom-6 sm:right-6">
+          <div className="rounded-[28px] border border-white/80 bg-white/88 p-2 shadow-[0_18px_60px_rgba(0,0,0,0.16)] backdrop-blur-xl">
+            <button className="btn-primary flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold text-white sm:text-base" type="button" onClick={openFoodModal}>
+              <span className="text-lg leading-none">+</span>
+              记饮食
+            </button>
+            <button className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#f2f2f7] px-5 py-3 text-sm font-semibold text-ink transition hover:bg-white sm:text-base" type="button" onClick={openExerciseModal}>
+              <span className="text-lg leading-none">+</span>
+              记运动
+            </button>
+          </div>
+        </div>
+      )}
+
+      {foodOpen && (
+        <Modal title={editingFoodId ? "编辑吃喝记录" : "记录饮食"} onClose={closeFoodModal} wide>
+          <div className="mb-4 rounded-[18px] bg-[#f5f5f7] p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-ink">拍照估算热量</p>
+                <p className="mt-1 text-xs leading-5 text-muted">照片识别只帮你预填名称和热量，价格还是你自己确认。</p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <label className="btn-secondary cursor-pointer rounded-full px-4 py-2 text-center text-sm font-semibold text-apple">
+                  {aiLoading ? "识别中..." : "拍照"}
+                  <input
+                    className="hidden"
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    disabled={aiLoading}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) analyzeMealPhoto(file);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+                <label className="btn-secondary cursor-pointer rounded-full px-4 py-2 text-center text-sm font-semibold text-apple">
+                  上传
+                  <input
+                    className="hidden"
+                    type="file"
+                    accept="image/*"
+                    disabled={aiLoading}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) analyzeMealPhoto(file);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+            {aiEstimate && (
+              <div className="mt-3 rounded-2xl bg-white p-3 text-sm text-muted">
+                <span className="font-semibold text-ink">{aiEstimate.name}</span> · 约 {aiEstimate.calories} kcal · 可信度 {aiEstimate.confidence}
+                {aiEstimate.note && <p className="mt-1">{aiEstimate.note}</p>}
+              </div>
+            )}
+            {aiError && <p className="mt-3 rounded-2xl bg-[#fff1f0] p-3 text-sm text-tomato">{aiError}</p>}
+          </div>
+
+          <div className="mb-4 border-y border-line/70 py-3">
+            <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-ink">常吃快捷</p>
+                <p className="mt-0.5 text-xs text-muted">导入模板，或把当前填写的内容存成常吃。</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <label className="btn-secondary cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold text-apple">
+                  导入模板
+                  <input className="hidden" type="file" accept="application/json,.json" onChange={importTemplateFile} />
+                </label>
+                <button className="btn-secondary rounded-full px-3 py-1.5 text-xs font-semibold text-apple" type="button" onClick={saveCurrentAsTemplate}>
+                  {editingTemplateId ? "保存模板" : "存为模板"}
+                </button>
+                {templates.length > 0 && (
+                  <button className="btn-danger rounded-full px-3 py-1.5 text-xs font-semibold" type="button" onClick={clearTemplates}>
+                    清空模板
+                  </button>
+                )}
+              </div>
+            </div>
+            {templates.length === 0 ? (
+              <div className="rounded-[18px] bg-[#f5f5f7] p-4">
+                <p className="text-sm font-semibold text-ink">还没有常吃模板。</p>
+                <p className="mt-1 text-xs leading-5 text-muted">可以导入 JSON 模板，也可以先手动填一餐，再点“存为模板”。</p>
+              </div>
+            ) : (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {templates.map((item) => (
+                  <div key={item.id} className="shrink-0 rounded-[18px] bg-[#f2f2f7] p-2">
+                    <button
+                      className="block min-w-28 rounded-2xl px-2 py-1 text-left transition hover:bg-white"
+                      onClick={() =>
+                        setFoodForm({
+                          ...foodForm,
+                          name: item.name,
+                          amount: item.amount,
+                          calories: item.calories,
+                          calorieConfidence: item.calorieConfidence,
+                          category: item.category
+                        })
+                      }
+                      type="button"
+                    >
+                      <span className="block text-sm font-semibold text-ink">{item.name}</span>
+                      <span className="text-xs text-muted">{money(item.amount)} · {calorieText(item)}</span>
+                    </button>
+                    <div className="mt-1 flex gap-1">
+                      <button className="btn-secondary rounded-full px-3 py-1 text-xs font-medium text-apple" type="button" onClick={() => editTemplate(item)}>
+                        编辑
+                      </button>
+                      <button
+                        className="btn-danger rounded-full px-3 py-1 text-xs font-medium"
+                        type="button"
+                        onClick={() => setPendingDelete({ type: "template", id: item.id, name: item.name })}
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <form className="grid gap-3 sm:grid-cols-2" onSubmit={saveFood}>
+            <Text label="名称" value={foodForm.name} onChange={(value) => setFoodForm({ ...foodForm, name: value })} />
+            <Field label="金额" value={foodForm.amount} step="0.01" onChange={(value) => setFoodForm({ ...foodForm, amount: Number(value) })} />
+            <Field
+              label="热量 kcal，可空"
+              value={foodForm.calories}
+              onChange={(value) =>
+                setFoodForm({
+                  ...foodForm,
+                  calories: value === "" ? "" : Number(value),
+                  calorieConfidence: value === "" ? "待补充" : foodForm.calorieConfidence === "待补充" ? "估算" : foodForm.calorieConfidence
+                })
+              }
+            />
+            <Select label="餐次" value={foodForm.meal} options={meals} onChange={(value) => setFoodForm({ ...foodForm, meal: value as Meal })} />
+            <button
+              type="button"
+              className="btn-secondary rounded-2xl px-4 py-3 text-sm font-medium text-muted sm:col-span-2"
+              onClick={() => setFoodMoreOpen((open) => !open)}
+            >
+              {foodMoreOpen ? "收起更多选项" : "更多选项：分类 / 来源 / 支付 / 备注"}
+            </button>
+            {foodMoreOpen && (
+              <div className="grid gap-3 rounded-[20px] bg-white/60 p-3 sm:col-span-2 sm:grid-cols-2">
+                <Select label="分类" value={foodForm.category} options={categories} onChange={(value) => setFoodForm({ ...foodForm, category: value as Category })} />
+                <Select label="热量可信度" value={foodForm.calorieConfidence} options={calorieConfidences} onChange={(value) => setFoodForm({ ...foodForm, calorieConfidence: value as CalorieConfidence })} />
+                <Select label="来源" value={foodForm.source} options={sources} onChange={(value) => setFoodForm({ ...foodForm, source: value as Source })} />
+                <Select label="支付方式" value={foodForm.payment} options={payments} onChange={(value) => setFoodForm({ ...foodForm, payment: value as Payment })} />
+                <Text label="日期" type="date" value={foodForm.date} onChange={(value) => setFoodForm({ ...foodForm, date: value })} />
+                <label className="sm:col-span-2">
+                  <span className="mb-1 block text-sm text-muted">备注</span>
+                  <textarea className="min-h-20 w-full rounded-2xl border border-transparent bg-[#f2f2f7] px-4 py-3 text-ink outline-none transition focus:border-apple/40 focus:bg-white focus:ring-4 focus:ring-apple/10" value={foodForm.note} onChange={(event) => setFoodForm({ ...foodForm, note: event.target.value })} />
+                </label>
+              </div>
+            )}
+            <button className="btn-primary rounded-2xl px-4 py-3 font-semibold text-white sm:col-span-2">
+              {editingFoodId ? "保存吃喝记录" : "新增吃喝记录"}
+            </button>
+          </form>
+        </Modal>
+      )}
 
       {exerciseOpen && (
         <Modal title={editingExerciseId ? "编辑运动记录" : "记录运动"} onClose={closeExerciseModal}>
@@ -1606,10 +1635,24 @@ function DashboardAction({
   );
 }
 
-function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+function Modal({
+  title,
+  children,
+  onClose,
+  wide = false
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+  wide?: boolean;
+}) {
   return (
     <div className="fixed inset-0 z-40 grid place-items-end bg-black/20 px-3 py-3 backdrop-blur-sm sm:place-items-center" role="dialog" aria-modal="true">
-      <section className="w-full max-w-md animate-[modalIn_0.24s_ease-out] rounded-[28px] border border-white/80 bg-paper p-5 shadow-[0_24px_80px_rgba(0,0,0,0.18)]">
+      <section
+        className={`max-h-[calc(100vh-1.5rem)] w-full overflow-y-auto animate-[modalIn_0.24s_ease-out] rounded-[28px] border border-white/80 bg-paper p-5 shadow-[0_24px_80px_rgba(0,0,0,0.18)] ${
+          wide ? "max-w-2xl" : "max-w-md"
+        }`}
+      >
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-xl font-semibold text-ink">{title}</h2>
           <button className="grid h-9 w-9 place-items-center rounded-full bg-[#f2f2f7] text-lg font-semibold text-muted transition hover:bg-white" type="button" onClick={onClose}>
