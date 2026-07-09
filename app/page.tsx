@@ -542,7 +542,7 @@ function HomeApp({ userId }: { userId: string }) {
   function scrollToSection(section: Section) {
     setActiveSection(section);
     window.requestAnimationFrame(() => {
-      document.getElementById(`section-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById("eatcost-dashboard")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }
 
@@ -730,19 +730,19 @@ function HomeApp({ userId }: { userId: string }) {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-3 py-5 sm:px-6 lg:py-10">
-      <header className="mb-5 flex flex-col gap-4 sm:mb-6 sm:flex-row sm:items-end sm:justify-between">
+    <main id="eatcost-dashboard" className="mx-auto max-w-6xl px-3 py-4 sm:px-6 lg:py-8">
+      <header className="mb-4 flex flex-col gap-3 sm:mb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-5xl font-semibold text-ink sm:text-7xl">Eatcost</h1>
-          <p className="mt-2 text-lg font-semibold text-ink sm:mt-3 sm:text-2xl">今天吃了多少钱？</p>
+          <h1 className="text-5xl font-semibold tracking-tight text-ink sm:text-7xl">Eatcost</h1>
+          <p className="mt-2 text-base font-medium text-muted sm:mt-3 sm:text-xl">今天吃了多少钱？</p>
         </div>
         <div className="flex flex-col gap-3 sm:items-end">
           <p className="max-w-sm text-sm leading-6 text-muted sm:text-right">打开就记一餐，顺手看看今天还能吃多少、还能花多少钱。</p>
         </div>
       </header>
 
-      <nav className="mb-4 -mx-3 border-y border-white/70 bg-white/80 px-3 py-2 backdrop-blur-xl sm:mx-0 sm:rounded-full sm:border sm:px-2">
-        <div className="flex gap-2 overflow-x-auto">
+      <nav className="sticky top-2 z-20 mb-4 rounded-[26px] border border-white/80 bg-white/85 p-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.06)] backdrop-blur-xl sm:mb-5 sm:inline-flex">
+        <div className="flex gap-1.5 overflow-x-auto">
           {[
             ["today", "今日"],
             ["record", "记录"],
@@ -751,8 +751,10 @@ function HomeApp({ userId }: { userId: string }) {
           ].map(([section, label]) => (
             <button
               key={section}
-              className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition hover:-translate-y-0.5 hover:bg-apple/10 hover:text-apple ${
-                activeSection === section ? "bg-apple text-white shadow-[0_10px_24px_rgba(0,122,255,0.22)]" : "bg-[#f2f2f7] text-ink"
+              className={`shrink-0 rounded-full px-5 py-2.5 text-sm font-semibold transition sm:px-6 sm:text-base ${
+                activeSection === section
+                  ? "bg-apple text-white shadow-[0_10px_24px_rgba(0,122,255,0.22)]"
+                  : "bg-[#f2f2f7]/80 text-ink hover:-translate-y-0.5 hover:bg-apple/10 hover:text-apple"
               }`}
               onClick={() => scrollToSection(section as Section)}
               type="button"
@@ -763,7 +765,7 @@ function HomeApp({ userId }: { userId: string }) {
         </div>
       </nav>
 
-      <section id="section-today" className="scroll-mt-4">
+      {activeSection === "today" && <section id="section-today" className="animate-[cardIn_0.24s_ease-out] scroll-mt-4">
         {foods.length + exercises.length === 0 && (
           <EmptyState
             title="想先看看完整效果？"
@@ -790,12 +792,12 @@ function HomeApp({ userId }: { userId: string }) {
             note={stats.hasFoodToday ? (stats.targetReached ? "已达成目标缺口" : `距离目标还差 ${round(body.targetDeficit - stats.todayDeficit)} kcal`) : "先记一笔后再计算"}
           />
         </div>
-      </section>
+      </section>}
 
-      <section id="section-record" className="scroll-mt-4">
-        <SectionHeader eyebrow="Record" title="快速记录" note="记录吃喝是主入口，常吃和拍照都放在同一张卡里。" className="mt-7" />
-        <div className="grid gap-3 lg:grid-cols-[1.45fr_0.85fr]">
-          <Card title="手动记录吃喝">
+      {activeSection === "record" && <section id="section-record" className="animate-[cardIn_0.24s_ease-out] scroll-mt-4">
+        <SectionHeader eyebrow="Record" title="快速记录" note="常吃、拍照、手动输入都放在这里，记完马上能在时间线看到。" />
+        <div className="grid items-start gap-3 lg:grid-cols-[1.35fr_0.9fr]">
+          <Card title="记录吃喝">
             <div className="mb-4 rounded-[18px] bg-[#f5f5f7] p-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -847,13 +849,16 @@ function HomeApp({ userId }: { userId: string }) {
               <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-semibold text-ink">常吃快捷</p>
-                  <p className="mt-0.5 text-xs text-muted">导入自己的常吃模板，或把当前记录保存成模板。</p>
+                  <p className="mt-0.5 text-xs text-muted">导入模板，或把当前填写的内容存成常吃。</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <label className="btn-secondary cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold text-apple">
                     导入模板
                     <input className="hidden" type="file" accept="application/json,.json" onChange={importTemplateFile} />
                   </label>
+                  <button className="btn-secondary rounded-full px-3 py-1.5 text-xs font-semibold text-apple" type="button" onClick={saveCurrentAsTemplate}>
+                    {editingTemplateId ? "保存模板" : "存为模板"}
+                  </button>
                   {templates.length > 0 && (
                     <button className="btn-danger rounded-full px-3 py-1.5 text-xs font-semibold" type="button" onClick={clearTemplates}>
                       清空模板
@@ -864,7 +869,7 @@ function HomeApp({ userId }: { userId: string }) {
               {templates.length === 0 ? (
                 <div className="rounded-[18px] bg-[#f5f5f7] p-4">
                   <p className="text-sm font-semibold text-ink">还没有常吃模板。</p>
-                  <p className="mt-1 text-xs leading-5 text-muted">可以导入 JSON 模板，也可以先手动填一餐，再点“把当前内容存为常吃模板”。</p>
+                  <p className="mt-1 text-xs leading-5 text-muted">可以导入 JSON 模板，也可以先手动填一餐，再点“存为模板”。</p>
                 </div>
               ) : (
                 <div className="flex gap-2 overflow-x-auto pb-1">
@@ -943,13 +948,10 @@ function HomeApp({ userId }: { userId: string }) {
               <button className="btn-primary rounded-2xl px-4 py-3 font-semibold text-white sm:col-span-2">
                 {editingFoodId ? "保存吃喝记录" : "新增吃喝记录"}
               </button>
-              <button className="btn-secondary rounded-2xl px-4 py-3 text-sm font-semibold text-apple sm:col-span-2" type="button" onClick={saveCurrentAsTemplate}>
-                {editingTemplateId ? "保存常吃模板修改" : "把当前内容存为常吃模板"}
-              </button>
             </form>
           </Card>
 
-          <div className="grid gap-3">
+          <div className="grid gap-3 lg:sticky lg:top-24">
             <Card title="今天还能吃什么">
               <TemplateSuggestions remainingIntake={stats.remainingIntake} remainingBudget={stats.todayBudgetLeft} templates={templates} />
             </Card>
@@ -986,10 +988,10 @@ function HomeApp({ userId }: { userId: string }) {
             />
           )}
         </Card>
-      </section>
+      </section>}
 
-      <section id="section-insights" className="scroll-mt-4">
-        <SectionHeader eyebrow="Insights" title="本月洞察" note="看支出构成和热量走势，不用在一堆小卡片里找。" className="mt-7" />
+      {activeSection === "insights" && <section id="section-insights" className="animate-[cardIn_0.24s_ease-out] scroll-mt-4">
+        <SectionHeader eyebrow="Insights" title="本月洞察" note="看支出构成和热量走势，不用在一堆小卡片里找。" />
         <Card title="本月总结">
           {stats.monthSpending === 0 ? (
             <EmptyState title="本月还没有吃喝记录。" note="记录一餐之后，这里会显示支出构成和预计花费。" action="填入示例数据" onAction={fillSampleData} compact />
@@ -1024,10 +1026,10 @@ function HomeApp({ userId }: { userId: string }) {
             <DistributionPanel title="本月来源构成" emptyText="本月还没有来源记录" items={stats.sourceSpending} formatter={money} className="lg:col-span-2" />
           </div>
         </Card>
-      </section>
+      </section>}
 
-      <section id="section-settings" className="scroll-mt-4">
-        <SectionHeader eyebrow="Settings" title="设置与数据" note="不常改的东西集中放这里，平时打开首页就直接记录。" className="mt-7" />
+      {activeSection === "settings" && <section id="section-settings" className="animate-[cardIn_0.24s_ease-out] scroll-mt-4">
+        <SectionHeader eyebrow="Settings" title="设置与数据" note="不常改的东西集中放这里，平时打开首页就直接记录。" />
         <div className="grid gap-3 lg:grid-cols-3">
           <Card title="个人目标">
             <div className="mb-4 grid grid-cols-2 gap-2">
@@ -1036,16 +1038,22 @@ function HomeApp({ userId }: { userId: string }) {
               <MiniMetric title="每日目标摄入" value={`${metrics.suggestedIntake} kcal`} />
               <MiniMetric title="目标热量缺口" value={`${body.targetDeficit} kcal`} />
             </div>
-            <div className="grid gap-3">
-              <Select label="性别" value={body.gender} options={["女", "男"]} onChange={(value) => setBody({ ...body, gender: value as "女" | "男" })} />
-              <Field label="年龄" value={body.age} onChange={(value) => setBody({ ...body, age: Number(value) })} />
-              <Field label="身高 cm" value={body.height} onChange={(value) => setBody({ ...body, height: Number(value) })} />
-              <Field label="当前体重 kg" value={body.currentWeight} step="0.1" onChange={(value) => setBody({ ...body, currentWeight: Number(value) })} />
-              <Field label="目标体重 kg" value={body.targetWeight} step="0.1" onChange={(value) => setBody({ ...body, targetWeight: Number(value) })} />
-              <Select label="活动水平" value={body.activity} options={Object.keys(activityFactors)} onChange={(value) => setBody({ ...body, activity: value as Activity })} />
-              <Select label="目标" value={body.goal} options={["维持体重", "减重", "增重"]} onChange={(value) => setBody({ ...body, goal: value as Goal })} />
-              <Field label="期望每日热量缺口 kcal" value={body.targetDeficit} onChange={(value) => setBody({ ...body, targetDeficit: Number(value) })} />
-            </div>
+            <details className="group rounded-[20px] bg-[#f5f5f7] p-3">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-apple">
+                编辑身体数据和目标
+                <span className="transition group-open:rotate-45">+</span>
+              </summary>
+              <div className="mt-3 grid gap-3">
+                <Select label="性别" value={body.gender} options={["女", "男"]} onChange={(value) => setBody({ ...body, gender: value as "女" | "男" })} />
+                <Field label="年龄" value={body.age} onChange={(value) => setBody({ ...body, age: Number(value) })} />
+                <Field label="身高 cm" value={body.height} onChange={(value) => setBody({ ...body, height: Number(value) })} />
+                <Field label="当前体重 kg" value={body.currentWeight} step="0.1" onChange={(value) => setBody({ ...body, currentWeight: Number(value) })} />
+                <Field label="目标体重 kg" value={body.targetWeight} step="0.1" onChange={(value) => setBody({ ...body, targetWeight: Number(value) })} />
+                <Select label="活动水平" value={body.activity} options={Object.keys(activityFactors)} onChange={(value) => setBody({ ...body, activity: value as Activity })} />
+                <Select label="目标" value={body.goal} options={["维持体重", "减重", "增重"]} onChange={(value) => setBody({ ...body, goal: value as Goal })} />
+                <Field label="期望每日热量缺口 kcal" value={body.targetDeficit} onChange={(value) => setBody({ ...body, targetDeficit: Number(value) })} />
+              </div>
+            </details>
           </Card>
 
           <Card title="预算设置">
@@ -1077,7 +1085,7 @@ function HomeApp({ userId }: { userId: string }) {
             </div>
           </Card>
         </div>
-      </section>
+      </section>}
 
       {exerciseOpen && (
         <Modal title={editingExerciseId ? "编辑运动记录" : "记录运动"} onClose={closeExerciseModal}>
